@@ -1,0 +1,70 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f6fa;
+  --text: #1d2230;
+  --panel: #ffffff;
+  --selected: #d7e4ff;
+  --peer: #edf2ff;
+  --same: #d5f5e6;
+  --conflict: #ffd8d8;
+}
+
+body.dark {
+  color-scheme: dark;
+  --bg: #141820;
+  --text: #e8edf7;
+  --panel: #1f2633;
+  --selected: #2f466f;
+  --peer: #23304a;
+  --same: #1f4f3d;
+  --conflict: #6f2f3a;
+}
+
+body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+main { max-width: 900px; margin: 0 auto; padding: 12px; }
+header { display: flex; justify-content: space-between; align-items: center; }
+.controls { display: grid; gap: 8px; margin: 10px 0; }
+.controls.top { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.controls.keypad { grid-template-columns: repeat(5, minmax(0, 1fr)); position: sticky; bottom: 0; background: var(--bg); padding-bottom: 8px; }
+button { border: 1px solid #889; border-radius: 10px; padding: 10px; background: var(--panel); color: var(--text); font-size: 16px; }
+button.active { border: 2px solid #4f7dff; }
+.board {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  background: var(--panel);
+  border: 2px solid #455;
+}
+.cell {
+  aspect-ratio: 1;
+  border: 1px solid #7c8599;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+  font-size: clamp(18px, 3.5vw, 28px);
+  font-weight: 500;
+  border-radius: 0;
+  padding: 0;
+}
+.cell:nth-child(3n) { border-right-width: 2px; }
+.cell:nth-child(n + 19):nth-child(-n + 27),
+.cell:nth-child(n + 46):nth-child(-n + 54) { border-bottom-width: 2px; }
+.cell.fixed { font-weight: 800; }
+.cell.selected { background: var(--selected); }
+.cell.peer { background: var(--peer); }
+.cell.same { background: var(--same); }
+.cell.conflict { background: var(--conflict); }
+.cell small {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  font-size: 11px;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-items: center;
+}
+.settings { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 14px; }
+.clear { margin-top: 12px; font-weight: 700; color: #2e9857; }
+
+@media (max-width: 700px) {
+  .controls.top { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
