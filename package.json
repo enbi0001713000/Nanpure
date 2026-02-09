@@ -1,0 +1,10 @@
+{
+  "name": "nanpure-web",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "test": "node --test src/core/sudoku.test.js"
+  }
+}
