@@ -2,7 +2,7 @@
   color-scheme: light;
   --bg: #f5f6fa;
   --text: #1d2230;
-  --panel: #ffffff;
+  --panel: #fff;
   --selected: #d7e4ff;
   --peer: #edf2ff;
   --same: #d5f5e6;
@@ -21,24 +21,39 @@ body.dark {
 }
 
 body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-main { max-width: 900px; margin: 0 auto; padding: 12px; }
-header { display: flex; justify-content: space-between; align-items: center; }
+main { max-width: 900px; margin: 0 auto; min-height: 100vh; padding: 16px; box-sizing: border-box; position: relative; }
+
+.screen { background: var(--panel); border-radius: 14px; padding: 16px; }
+.screen.home { min-height: 70vh; display: grid; place-content: center; gap: 16px; text-align: center; position: relative; }
+.home-title { font-size: 42px; line-height: 1.2; margin: 0; }
+.home-title span { font-size: 30px; }
+.cta { font-size: 20px; padding: 14px 24px; }
+
+.row { display: flex; gap: 8px; align-items: center; }
+.row.between { justify-content: space-between; }
+
+h2, h3, p { margin-top: 0; }
+.difficulty-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+button, input { font-size: 16px; }
+button { border: 1px solid #889; border-radius: 10px; padding: 10px; background: var(--panel); color: var(--text); }
+button:disabled { opacity: 0.5; }
+button.primary { background: #355fe6; color: #fff; border-color: #2c4db8; }
+button.ghost { border: none; background: transparent; }
+button.link { background: transparent; border: none; text-decoration: underline; }
+button.icon-button { border-radius: 999px; width: 42px; height: 42px; display: grid; place-items: center; padding: 0; }
+button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; font-weight: 700; }
+
+.play-header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; margin-bottom: 10px; }
+.meta { text-align: center; font-weight: 700; }
 .controls { display: grid; gap: 8px; margin: 10px 0; }
-.controls.top { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.controls.keypad { grid-template-columns: repeat(5, minmax(0, 1fr)); position: sticky; bottom: 0; background: var(--bg); padding-bottom: 8px; }
-button { border: 1px solid #889; border-radius: 10px; padding: 10px; background: var(--panel); color: var(--text); font-size: 16px; }
-button.active { border: 2px solid #4f7dff; }
-.board {
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  background: var(--panel);
-  border: 2px solid #455;
-}
+.controls.top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.controls.keypad { grid-template-columns: repeat(5, minmax(0, 1fr)); position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; }
+
+.board { display: grid; grid-template-columns: repeat(9, 1fr); background: var(--panel); border: 2px solid #455; }
 .cell {
   aspect-ratio: 1;
   border: 1px solid #7c8599;
-  border-right-width: 1px;
-  border-bottom-width: 1px;
   font-size: clamp(18px, 3.5vw, 28px);
   font-weight: 500;
   border-radius: 0;
@@ -62,9 +77,36 @@ button.active { border: 2px solid #4f7dff; }
   align-items: center;
   justify-items: center;
 }
-.settings { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 14px; }
-.clear { margin-top: 12px; font-weight: 700; color: #2e9857; }
+.memo-indicator { text-align: center; font-size: 14px; opacity: 0.75; }
+.memo-indicator.on { color: #2f68ff; font-weight: 700; opacity: 1; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 20;
+}
+.modal { width: min(520px, 100%); background: var(--panel); border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+.modal input { width: 100%; box-sizing: border-box; border: 1px solid #889; border-radius: 8px; padding: 8px; margin-top: 4px; }
+.modal.result .result-card { background: rgba(80,120,255,0.12); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.modal.result .time { font-size: 22px; font-weight: 700; }
+.wide { width: 100%; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 18px;
+  background: #1f2633;
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  z-index: 25;
+}
 
 @media (max-width: 700px) {
-  .controls.top { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .difficulty-grid { grid-template-columns: 1fr; }
 }

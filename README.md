@@ -15,22 +15,35 @@ npm run dev
 npm run test
 ```
 
-## 実装済み（MVP）
+## 画面状態（1ページ内状態切替）
 
-- 難易度別の新規ゲーム（易/中/難/鬼）
-- 値入力 / 消去 / メモモード
-- Undo / Redo（値とメモ両方）
-- タイマー（開始・クリア時停止）
-- ミス表示 ON/OFF
-- 途中状態の自動保存と復帰（localStorage）
-- ダークモード
-- キーボード操作（矢印、1-9、Delete、N、Ctrl+Z / Ctrl+Y）
+- `HOME`：タイトル（2行）と「挑戦する」
+- `SELECT`：難易度選択
+- `PLAY`：盤面操作
+- `MODAL_USERNAME`：初回開始時の名前登録
+- `MODAL_SETTINGS`：設定（ユーザーネーム変更、表示設定）
+- `MODAL_RESULT`：クリア時のリザルト
 
-## 重要な改善点（白画面対策）
+### 遷移概要
 
-- `main.ts` / TypeScript + Vite 前提をやめ、**ブラウザが直接読める ES Modules (`.js`)** に変更しました。
-- CSS は JS import ではなく `index.html` の `<link>` で読み込む構成に変更しました。
+`HOME → SELECT → (名前未登録なら MODAL_USERNAME) → PLAY → MODAL_RESULT`
 
-## デプロイ
+- `MODAL_RESULT` から「もう一度」で同難易度を再開
+- `MODAL_RESULT` から「ホームへ」で `HOME` へ戻る
+- URLパスは固定（方式A）
+
+## 主な機能
+
+- 固定リンク共有（X Intent）とリンクコピー
+- ハッシュタグ固定：`#えびナンプレ`
+- クリア後の編集ロック（入力/メモ/Undo/Redo無効）
+- メモモードの視認性強化（ボタン状態とインジケーター）
+- 難易度再選択時の破棄確認
+- localStorage 保存
+  - `np_username_v1`
+  - `np_settings_v1`
+  - `np_save_v1`
+
+## デプロイ（GitHub Pages）
 
 このリポジトリのファイルをそのまま GitHub Pages に公開可能です（ビルド工程不要）。
