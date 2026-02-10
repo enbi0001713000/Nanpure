@@ -1,6 +1,28 @@
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
+
+function isNumberGrid(grid) {
+  return Array.isArray(grid) && grid.length === 9 && grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => Number.isInteger(v)));
+}
+
+function isBooleanGrid(grid) {
+  return Array.isArray(grid) && grid.length === 9 && grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => typeof v === 'boolean'));
+}
+
+function isNotesGrid(notes) {
+  return (
+    Array.isArray(notes) &&
+    notes.length === 9 &&
+    notes.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 9 &&
+        row.every((cell) => Array.isArray(cell) && cell.every((n) => Number.isInteger(n) && n >= 1 && n <= 9))
+    )
+  );
+}
+
 const DEFAULT_SETTINGS = {
   darkMode: true,
   mistakeHighlight: true,
@@ -39,11 +61,17 @@ export function saveSettings(settings) {
 export function loadSave() {
   const parsed = readJson(SAVE_KEY);
   if (!parsed || typeof parsed !== 'object') return null;
-  if (!Array.isArray(parsed.values) || !Array.isArray(parsed.fixed) || !Array.isArray(parsed.notes)) {
+  if (!isNumberGrid(parsed.values) || !isBooleanGrid(parsed.fixed) || !isNotesGrid(parsed.notes)) {
     localStorage.removeItem(SAVE_KEY);
     return null;
   }
-  return parsed;
+
+  return {
+    ...parsed,
+    history: Array.isArray(parsed.history) ? parsed.history : [],
+    future: Array.isArray(parsed.future) ? parsed.future : [],
+    hintUses: typeof parsed.hintUses === 'number' ? parsed.hintUses : 0
+  };
 }
 
 export function saveGame(data) {
