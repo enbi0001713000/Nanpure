@@ -1,9 +1,16 @@
 :root {
   color-scheme: light;
+
+  --bg: radial-gradient(circle at 22% 16%, #ffffff 0%, #f9fcff 48%, #edf3ff 100%);
+  --text: #17243f;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-border: rgba(120, 188, 224, 0.46);
+
   --bg: radial-gradient(circle at 20% 18%, #ffffff 0%, #f2f7ff 52%, #e4edff 100%);
   --text: #17243f;
   --panel: rgba(255, 255, 255, 0.85);
   --panel-border: rgba(76, 128, 219, 0.35);
+
   --selected: rgba(87, 211, 255, 0.3);
   --peer: rgba(66, 116, 255, 0.22);
   --same: rgba(137, 107, 255, 0.2);
@@ -34,6 +41,85 @@ body {
 }
 
 body:not(.dark) .screen {
+  box-shadow: 0 12px 28px rgba(58, 99, 154, 0.14), inset 0 0 18px rgba(159, 230, 255, 0.22);
+}
+
+body:not(.dark) button {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(107, 175, 214, 0.56);
+  color: #163250;
+}
+
+body:not(.dark) .controls.keypad {
+  background: rgba(244, 250, 255, 0.92);
+  border-top-color: rgba(118, 185, 220, 0.34);
+}
+
+body:not(.dark) .board {
+  background: rgba(251, 254, 255, 0.96);
+  border-color: rgba(102, 173, 210, 0.74);
+  box-shadow: 0 0 18px rgba(121, 188, 220, 0.24), inset 0 0 16px rgba(180, 229, 248, 0.34);
+}
+
+body:not(.dark) .cell {
+  color: #122944;
+  text-shadow: none;
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(128, 185, 217, 0.45);
+}
+
+body:not(.dark) .screen.home {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 252, 255, 0.98));
+}
+
+body:not(.dark) .home-title {
+  color: #245f95;
+  text-shadow: 0 0 10px rgba(120, 227, 255, 0.46);
+}
+
+body:not(.dark) .home-subtitle {
+  color: #2c5f8f;
+  text-shadow: 0 0 8px rgba(175, 232, 255, 0.48);
+}
+
+body:not(.dark) .cta {
+  background: linear-gradient(180deg, #ffffff, #ecf8ff);
+  border-color: rgba(109, 189, 222, 0.78);
+  color: #1a4d7a;
+  box-shadow: 0 0 0 1px rgba(129, 210, 236, 0.76), 0 10px 20px rgba(136, 206, 231, 0.28);
+}
+
+body:not(.dark) .home-grid {
+  border-color: rgba(130, 171, 236, 0.55);
+  background-image:
+    linear-gradient(to right, rgba(128, 169, 234, 0.42) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(128, 169, 234, 0.42) 1px, transparent 1px);
+  box-shadow: 0 0 12px rgba(116, 155, 223, 0.28);
+}
+
+body:not(.dark) .home-glow-left {
+  background: radial-gradient(circle, rgba(123, 194, 255, 0.34), rgba(112, 156, 237, 0));
+}
+
+body:not(.dark) .home-glow-right {
+  background: radial-gradient(circle, rgba(170, 140, 255, 0.3), rgba(136, 126, 228, 0));
+}
+
+body:not(.dark) .screen.play {
+  background:
+    radial-gradient(circle at 8% 12%, rgba(129, 220, 255, 0.22), transparent 28%),
+    radial-gradient(circle at 92% 78%, rgba(151, 231, 255, 0.2), transparent 28%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.99), rgba(243, 251, 255, 0.98));
+}
+
+body:not(.dark) .meta {
+  color: #1d3d7d;
+  text-shadow: none;
+}
+
+
+:root {
+  --play-viewport-height: 100dvh;
   box-shadow: 0 10px 24px rgba(43, 70, 124, 0.16), inset 0 0 18px rgba(146, 185, 255, 0.2);
 }
 
@@ -43,9 +129,94 @@ body:not(.dark) button {
   color: #15284d;
 }
 
+
+header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 30px);
+}
+
+.settings-button {
+  width: 52px;
+  height: 52px;
+  font-size: 24px;
+  border-width: 2px;
+}
+
+.settings {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  gap: 8px;
+}
+
+.settings.open {
+  display: grid;
+}
+
+.settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.penalty-controls {
+  margin: 10px 0 14px;
+}
+
+.penalty-button {
+  width: 100%;
+  min-height: 52px;
+  font-size: 18px;
+  font-weight: 800;
+  background: linear-gradient(180deg, rgba(214, 81, 114, 0.95), rgba(157, 41, 75, 0.95));
+  border: 2px solid rgba(255, 186, 202, 0.78);
+  color: #fff;
+}
+
+.clear {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 214, 140, 0.72);
+  background: rgba(255, 247, 209, 0.16);
+  font-weight: 700;
+}
+
+body:not(.dark) .penalty-button {
+  background: linear-gradient(180deg, #ff9cb2, #ff7f9a);
+  border-color: #f85a80;
+  color: #5b1030;
+}
+
+body:not(.dark) .clear {
+  border-color: rgba(230, 176, 74, 0.7);
+  background: rgba(255, 245, 211, 0.92);
+  color: #5a3a00;
+}
+
+
+@supports (height: 100dvh) {
+  body.play-mode,
+  body.play-mode .app-main.play-main {
+    height: var(--play-viewport-height, 100dvh);
+    min-height: var(--play-viewport-height, 100dvh);
+  }
+
 body:not(.dark) .controls.keypad {
   background: rgba(224, 235, 255, 0.9);
   border-top-color: rgba(72, 121, 209, 0.25);
+
 }
 
 body:not(.dark) .board {
