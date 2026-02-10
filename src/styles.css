@@ -429,6 +429,10 @@ button.active { border: 2px solid #76d8ff; background: rgba(62, 98, 234, 0.55); 
 }
 
 @media (min-width: 1024px) {
+  .controls.top {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .cell {
     font-size: clamp(28px, 2.1vw, 42px);
     font-weight: 750;

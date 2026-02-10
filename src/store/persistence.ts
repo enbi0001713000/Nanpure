@@ -1,4 +1,4 @@
-import type { Difficulty, DifficultyStats, GameStats, HistorySnapshot, Settings } from '../core/types';
+import type { Difficulty, HistorySnapshot, Settings } from '../core/types';
 
 export type SaveData = {
   difficulty: Difficulty;
@@ -17,7 +17,56 @@ export type SaveData = {
 
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
-const STATS_KEY = 'np_stats_v1';
+
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+function safeRemoveItem(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+
+function isNumberGrid(grid: unknown): grid is number[][] {
+  return (
+    Array.isArray(grid) &&
+    grid.length === 9 &&
+    grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => Number.isInteger(v)))
+  );
+}
+
+function isBooleanGrid(grid: unknown): grid is boolean[][] {
+  return (
+    Array.isArray(grid) &&
+    grid.length === 9 &&
+    grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => typeof v === 'boolean'))
+  );
+}
+
+function isNotesGrid(notes: unknown): notes is number[][][] {
+  return (
+    Array.isArray(notes) &&
+    notes.length === 9 &&
+    notes.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 9 &&
+        row.every((cell) => Array.isArray(cell) && cell.every((n) => Number.isInteger(n) && n >= 1 && n <= 9))
+    )
+  );
+}
 
 const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
@@ -26,38 +75,13 @@ const DEFAULT_SETTINGS: Settings = {
   toggleToErase: true
 };
 
-const DEFAULT_DIFFICULTY_STATS: DifficultyStats = {
-  bestMs: null,
-  clearCount: 0
-};
-
-
-function cloneDefaultStats(): GameStats {
-  return {
-    easy: { ...DEFAULT_DIFFICULTY_STATS },
-    medium: { ...DEFAULT_DIFFICULTY_STATS },
-    hard: { ...DEFAULT_DIFFICULTY_STATS },
-    oni: { ...DEFAULT_DIFFICULTY_STATS }
-  };
-}
-
-function sanitizeDifficultyStats(parsed: unknown): DifficultyStats {
-  if (!parsed || typeof parsed !== 'object') {
-    return { ...DEFAULT_DIFFICULTY_STATS };
-  }
-  const stats = parsed as Partial<DifficultyStats>;
-  const bestMs = typeof stats.bestMs === 'number' && stats.bestMs >= 0 ? stats.bestMs : null;
-  const clearCount = typeof stats.clearCount === 'number' && stats.clearCount >= 0 ? Math.floor(stats.clearCount) : 0;
-  return { bestMs, clearCount };
-}
-
 function readJson(key: string): unknown {
-  const raw = localStorage.getItem(key);
+  const raw = safeGetItem(key);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as unknown;
   } catch {
-    localStorage.removeItem(key);
+    safeRemoveItem(key);
     return null;
   }
 }
@@ -77,60 +101,29 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(settings: Settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  safeSetItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function loadSave(): SaveData | null {
   const parsed = readJson(SAVE_KEY);
   if (!parsed || typeof parsed !== 'object') return null;
   const save = parsed as Partial<SaveData>;
-  if (!Array.isArray(save.values) || !Array.isArray(save.fixed) || !Array.isArray(save.notes)) {
-    localStorage.removeItem(SAVE_KEY);
+  if (!isNumberGrid(save.values) || !isBooleanGrid(save.fixed) || !isNotesGrid(save.notes)) {
+    safeRemoveItem(SAVE_KEY);
     return null;
   }
   return {
     ...(save as SaveData),
+    history: Array.isArray(save.history) ? save.history : [],
+    future: Array.isArray(save.future) ? save.future : [],
     hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0
   };
 }
 
 export function saveGame(data: SaveData) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  safeSetItem(SAVE_KEY, JSON.stringify(data));
 }
 
 export function clearSave() {
-  localStorage.removeItem(SAVE_KEY);
-}
-
-export function loadStats(): GameStats {
-  const parsed = readJson(STATS_KEY);
-  if (!parsed || typeof parsed !== 'object') {
-    return cloneDefaultStats();
-  }
-  const partial = parsed as Partial<GameStats>;
-  return {
-    easy: sanitizeDifficultyStats(partial.easy),
-    medium: sanitizeDifficultyStats(partial.medium),
-    hard: sanitizeDifficultyStats(partial.hard),
-    oni: sanitizeDifficultyStats(partial.oni)
-  };
-}
-
-export function saveStats(stats: GameStats) {
-  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
-}
-
-export function recordClearStats(difficulty: Difficulty, clearMs: number): GameStats {
-  const current = loadStats();
-  const existing = current[difficulty];
-  const nextBest = existing.bestMs === null ? clearMs : Math.min(existing.bestMs, clearMs);
-  const next: GameStats = {
-    ...current,
-    [difficulty]: {
-      bestMs: nextBest,
-      clearCount: existing.clearCount + 1
-    }
-  };
-  saveStats(next);
-  return next;
+  safeRemoveItem(SAVE_KEY);
 }
