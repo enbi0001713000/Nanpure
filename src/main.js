@@ -299,8 +299,13 @@ async function copyResult() {
 function renderHome() {
   return `
   <section class="screen home">
+    <div class="home-glow home-glow-left" aria-hidden="true"></div>
+    <div class="home-glow home-glow-right" aria-hidden="true"></div>
+    <div class="home-grid home-grid-left" aria-hidden="true"></div>
+    <div class="home-grid home-grid-right" aria-hidden="true"></div>
     <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
-    <h1 class="home-title">ナンプレ<br><span>-えびの挑戦状-</span></h1>
+    <h1 class="home-title">ナンプレ</h1>
+    <p class="home-subtitle">-えびの挑戦状-</p>
     <button class="primary cta" data-act="go-select">挑戦する</button>
   </section>`;
 }
