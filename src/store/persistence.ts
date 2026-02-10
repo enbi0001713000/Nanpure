@@ -17,17 +17,36 @@ export type SaveData = {
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
-export function loadSettings(): Settings {
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) {
-    return {
-      darkMode: false,
-      mistakeHighlight: true,
-      highlightSameNumber: true,
-      toggleToErase: true
-    };
+const DEFAULT_SETTINGS: Settings = {
+  darkMode: false,
+  mistakeHighlight: true,
+  highlightSameNumber: true,
+  toggleToErase: true
+};
+
+function readJson(key: string): unknown {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
   }
-  return JSON.parse(raw) as Settings;
+}
+
+export function loadSettings(): Settings {
+  const parsed = readJson(SETTINGS_KEY);
+  if (!parsed || typeof parsed !== 'object') {
+    return { ...DEFAULT_SETTINGS };
+  }
+  const settings = parsed as Partial<Settings>;
+  return {
+    darkMode: !!settings.darkMode,
+    mistakeHighlight: settings.mistakeHighlight !== false,
+    highlightSameNumber: settings.highlightSameNumber !== false,
+    toggleToErase: settings.toggleToErase !== false
+  };
 }
 
 export function saveSettings(settings: Settings) {
@@ -35,9 +54,14 @@ export function saveSettings(settings: Settings) {
 }
 
 export function loadSave(): SaveData | null {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return null;
-  return JSON.parse(raw) as SaveData;
+  const parsed = readJson(SAVE_KEY);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const save = parsed as Partial<SaveData>;
+  if (!Array.isArray(save.values) || !Array.isArray(save.fixed) || !Array.isArray(save.notes)) {
+    localStorage.removeItem(SAVE_KEY);
+    return null;
+  }
+  return save as SaveData;
 }
 
 export function saveGame(data: SaveData) {
