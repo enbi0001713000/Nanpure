@@ -129,12 +129,15 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
 
 .cell {
   min-width: 0;
+  min-inline-size: 0;
   aspect-ratio: 1;
   border: 1px solid #7c8599;
   font-size: clamp(18px, 3.5vw, 28px);
   font-weight: 500;
   border-radius: 0;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .cell:nth-child(3n) { border-right-width: 2px; }
