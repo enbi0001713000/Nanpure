@@ -1,8 +1,8 @@
 import './styles.css';
 import { getRandomPuzzle } from './core/puzzleBank';
 import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku';
-import type { Cell, Difficulty, HistorySnapshot, Position, Settings } from './core/types';
-import { clearSave, loadSave, loadSettings, saveGame, saveSettings } from './store/persistence';
+import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types';
+import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence';
 
 type State = {
   difficulty: Difficulty;
@@ -17,6 +17,9 @@ type State = {
   timerRunning: boolean;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
+  stats: GameStats;
+  clearRecorded: boolean;
+  settingsOpen: boolean;
 };
 
 let state: State;
@@ -42,16 +45,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
   state.selected = snapshot.selected;
   state.noteMode = snapshot.noteMode;
 }
-
-function pushHistory() {
-  state.history.push(cloneSnapshot());
-  if (state.history.length > 200) state.history.shift();
-  state.future = [];
-}
-
-function createCells(values: number[][], initial: number[][]): Cell[][] {
-  return values.map((row, r) =>
-    row.map((value, c) => ({
+@@ -57,80 +58,82 @@ function createCells(values: number[][], initial: number[][]): Cell[][] {
       value,
       fixed: initial[r][c] !== 0,
       notes: new Set<number>()
@@ -75,7 +69,10 @@ function newGame(difficulty: Difficulty) {
     hintUses: 0,
     timerRunning: true,
     history: [],
-    future: []
+    future: [],
+    stats: loadStats(),
+    clearRecorded: false,
+    settingsOpen: false
   };
   render();
 }
@@ -102,7 +99,10 @@ function restoreOrBoot() {
     hintUses: save.hintUses,
     timerRunning: true,
     history: save.history,
-    future: save.future
+    future: save.future,
+    stats: loadStats(),
+    clearRecorded: false,
+    settingsOpen: false
   };
   render();
 }
@@ -128,37 +128,7 @@ let saveTimer: number | undefined;
 function scheduleSave() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(serialize, 250);
-}
-
-function setSelected(pos: Position) {
-  state.selected = pos;
-  render();
-}
-
-function inputValue(value: number) {
-  const pos = state.selected;
-  if (!pos) return;
-  const cell = state.cells[pos.r][pos.c];
-  if (cell.fixed) return;
-  pushHistory();
-
-  if (state.noteMode) {
-    if (value === 0) {
-      cell.notes.clear();
-    } else if (cell.notes.has(value)) {
-      cell.notes.delete(value);
-    } else {
-      cell.notes.add(value);
-    }
-  } else {
-    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-
-  render();
-  scheduleSave();
-}
+@@ -168,50 +171,55 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
@@ -184,39 +154,25 @@ function toggleSetting(key: keyof Settings) {
   render();
 }
 
+function toggleSettingsPanel() {
+  state.settingsOpen = !state.settingsOpen;
+  render();
+}
+
 const HINT_LIMIT_PER_BOARD = 3;
 const HINT_PENALTY_MS = 30_000;
 
-function findHintTarget(): Position | null {
-  if (state.selected) {
-    const selectedCell = state.cells[state.selected.r][state.selected.c];
-    if (!selectedCell.fixed && selectedCell.value !== state.solution[state.selected.r][state.selected.c]) {
-      return state.selected;
-    }
-  }
-
-  for (let r = 0; r < 9; r += 1) {
-    for (let c = 0; c < 9; c += 1) {
-      const cell = state.cells[r][c];
-      if (!cell.fixed && cell.value !== state.solution[r][c]) {
-        return { r, c };
-      }
-    }
-  }
-  return null;
-}
-
 function useHint() {
+  const pos = state.selected;
+  if (!pos) return;
+  const cell = state.cells[pos.r][pos.c];
+  if (cell.fixed) return;
   if (state.hintUses >= HINT_LIMIT_PER_BOARD) return;
 
-  const pos = findHintTarget();
-  if (!pos) return;
-
-  const cell = state.cells[pos.r][pos.c];
   const answer = state.solution[pos.r][pos.c];
+  if (cell.value === answer) return;
 
   pushHistory();
-  state.selected = pos;
   cell.value = answer;
   cell.notes.clear();
   state.hintUses += 1;
@@ -228,46 +184,33 @@ function useHint() {
 function formattedTime(ms: number) {
   const totalSec = Math.floor(ms / 1000);
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-  const s = String(totalSec % 60).padStart(2, '0');
-  return `${m}:${s}`;
+@@ -222,141 +230,146 @@ function formattedTime(ms: number) {
+function formattedBestTime(ms: number | null) {
+  return ms === null ? '--:--' : formattedTime(ms);
 }
 
-let fatalRendering = false;
-
-function showFatalScreen(error: unknown) {
-  if (fatalRendering) return;
-  fatalRendering = true;
-  console.error('Fatal render error:', error);
-  clearSave();
-  document.body.classList.remove('play-mode');
-  app.innerHTML = `
-    <main>
-      <section class="screen home">
-        <h2>復旧のためデータを初期化しました</h2>
-        <p>画面表示で問題を検知したため、保存データを削除して安全モードで起動しています。</p>
-        <button class="primary" data-act="reload">再読み込み</button>
-      </section>
-    </main>`;
-  const reload = app.querySelector<HTMLButtonElement>('button[data-act="reload"]');
-  if (reload) reload.onclick = () => window.location.reload();
-}
-
-function renderInternal() {
+function render() {
   document.body.classList.toggle('dark', state.settings.darkMode);
   const values = state.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
   const selectedValue = state.selected ? values[state.selected.r][state.selected.c] : 0;
   const cleared = isCompleteAndValid(values);
+  const difficultyStats = state.stats[state.difficulty];
   if (cleared) {
     state.timerRunning = false;
-    clearSave();
+    if (!state.clearRecorded) {
+      state.clearRecorded = true;
+      clearSave();
+      state.stats = recordClearStats(state.difficulty, state.elapsedMs);
+    }
   }
 
   app.innerHTML = `
   <main>
     <header>
       <h1>Nanpure Web</h1>
-      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}</div>
+      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+      <button data-act="settings" class="icon-button settings-button" aria-expanded="${state.settingsOpen}" aria-label="設定を開く">⚙️</button>
     </header>
     <section class="controls top">
       <button data-new="easy">易</button>
@@ -277,7 +220,9 @@ function renderInternal() {
       <button data-act="undo">Undo</button>
       <button data-act="redo">Redo</button>
       <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
-      <button data-act="hint" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>ヒント (${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)})</button>
+    </section>
+    <section class="controls penalty-controls">
+      <button data-act="hint" class="penalty-button" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>罰ヒント（-30秒） 残り${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)}回</button>
     </section>
     <section class="board" role="grid" aria-label="ナンプレ盤面">
       ${state.cells
@@ -314,25 +259,22 @@ function renderInternal() {
       ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
       <button data-num="0">消す</button>
     </section>
-    <section class="settings">
+    <section class="settings ${state.settingsOpen ? 'open' : ''}">
       <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
       <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
     </section>
-    ${cleared ? `<div class="clear">クリア！ ${formattedTime(state.elapsedMs)}</div>` : ''}
+    ${
+      cleared
+        ? `<div class="clear">クリア！ 今回タイム: ${formattedTime(state.elapsedMs)} / ベストタイム: ${formattedBestTime(
+            difficultyStats.bestMs
+          )} / 累計クリア: ${difficultyStats.clearCount}</div>`
+        : ''
+    }
   </main>`;
 
   wireEvents();
-}
-
-function render() {
-  try {
-    renderInternal();
-    fatalRendering = false;
-  } catch (error) {
-    showFatalScreen(error);
-  }
 }
 
 function wireEvents() {
@@ -363,6 +305,7 @@ function wireEvents() {
     render();
   };
   byAct('hint')!.onclick = useHint;
+  byAct('settings')!.onclick = toggleSettingsPanel;
 }
 
 document.addEventListener('keydown', (e) => {
@@ -387,19 +330,4 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') return inputValue(0);
 });
 
-window.addEventListener('error', (event) => {
-  if (event.error) showFatalScreen(event.error);
-});
-window.addEventListener('unhandledrejection', (event) => {
-  showFatalScreen(event.reason);
-});
 window.addEventListener('beforeunload', serialize);
-setInterval(() => {
-  if (!state?.timerRunning) return;
-  state.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}`;
-  scheduleSave();
-}, 1000);
-
-restoreOrBoot();
