@@ -9,6 +9,10 @@
   --conflict: #ffd8d8;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body.dark {
   color-scheme: dark;
   --bg: #141820;
@@ -34,6 +38,7 @@ main { max-width: 900px; margin: 0 auto; min-height: 100vh; padding: 16px; box-s
 body.play-mode {
   height: 100vh;
   overflow: hidden;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 body.play-mode .app-main.play-main {
@@ -81,7 +86,10 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
   flex-direction: column;
   overflow: hidden;
   padding: 10px 12px 12px;
-  box-sizing: border-box;
+}
+
+.memo-indicator {
+  margin-top: 4px;
 }
 
 .board-area {
@@ -92,6 +100,7 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
   padding: 8px;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 .controls.keypad {
@@ -115,8 +124,11 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
   max-height: 100%;
   aspect-ratio: 1;
   margin: 0 auto;
+  touch-action: pan-x pan-y pinch-zoom;
 }
+
 .cell {
+  min-width: 0;
   aspect-ratio: 1;
   border: 1px solid #7c8599;
   font-size: clamp(18px, 3.5vw, 28px);
@@ -124,6 +136,7 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
   border-radius: 0;
   padding: 0;
 }
+
 .cell:nth-child(3n) { border-right-width: 2px; }
 .cell:nth-child(n + 19):nth-child(-n + 27),
 .cell:nth-child(n + 46):nth-child(-n + 54) { border-bottom-width: 2px; }
@@ -141,3 +154,4 @@ button.active { border: 2px solid #4f7dff; background: #e4ecff; color: #1d2f6d; 
   height: 100%;
   align-items: center;
   justify-items: center;
+}
