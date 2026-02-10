@@ -45,16 +45,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
   state.selected = snapshot.selected;
   state.noteMode = snapshot.noteMode;
 }
-
-function pushHistory() {
-  state.history.push(cloneSnapshot());
-  if (state.history.length > 200) state.history.shift();
-  state.future = [];
-}
-
-function createCells(values: number[][], initial: number[][]): Cell[][] {
-  return values.map((row, r) =>
-    row.map((value, c) => ({
+@@ -57,80 +58,82 @@ function createCells(values: number[][], initial: number[][]): Cell[][] {
       value,
       fixed: initial[r][c] !== 0,
       notes: new Set<number>()
@@ -137,37 +128,7 @@ let saveTimer: number | undefined;
 function scheduleSave() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(serialize, 250);
-}
-
-function setSelected(pos: Position) {
-  state.selected = pos;
-  render();
-}
-
-function inputValue(value: number) {
-  const pos = state.selected;
-  if (!pos) return;
-  const cell = state.cells[pos.r][pos.c];
-  if (cell.fixed) return;
-  pushHistory();
-
-  if (state.noteMode) {
-    if (value === 0) {
-      cell.notes.clear();
-    } else if (cell.notes.has(value)) {
-      cell.notes.delete(value);
-    } else {
-      cell.notes.add(value);
-    }
-  } else {
-    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-
-  render();
-  scheduleSave();
-}
+@@ -168,50 +171,55 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
@@ -223,10 +184,7 @@ function useHint() {
 function formattedTime(ms: number) {
   const totalSec = Math.floor(ms / 1000);
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-  const s = String(totalSec % 60).padStart(2, '0');
-  return `${m}:${s}`;
-}
-
+@@ -222,141 +230,146 @@ function formattedTime(ms: number) {
 function formattedBestTime(ms: number | null) {
   return ms === null ? '--:--' : formattedTime(ms);
 }
@@ -373,15 +331,3 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
-setInterval(() => {
-  if (!state?.timerRunning) return;
-  state.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) {
-    const difficultyStats = state.stats[state.difficulty];
-    meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
-  }
-  scheduleSave();
-}, 1000);
-
-restoreOrBoot();

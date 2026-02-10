@@ -29,11 +29,17 @@ const HINT_LIMIT_PER_BOARD = 3;
 const HINT_PENALTY_MS = 30_000;
 
 function getUsername() {
-  return localStorage.getItem(USERNAME_KEY) ?? '';
+  try {
+    return localStorage.getItem(USERNAME_KEY) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 function setUsername(name) {
-  localStorage.setItem(USERNAME_KEY, name);
+  try {
+    localStorage.setItem(USERNAME_KEY, name);
+  } catch {}
 }
 
 function normalizeName(name) {
@@ -250,18 +256,40 @@ function redo() {
   scheduleSave();
 }
 
+function findHintTarget(game) {
+  const selected = game.selected;
+  if (selected) {
+    const selectedCell = game.cells[selected.r][selected.c];
+    if (!selectedCell.fixed && selectedCell.value !== game.solution[selected.r][selected.c]) {
+      return selected;
+    }
+  }
+
+  for (let r = 0; r < 9; r += 1) {
+    for (let c = 0; c < 9; c += 1) {
+      const cell = game.cells[r][c];
+      if (!cell.fixed && cell.value !== game.solution[r][c]) {
+        return { r, c };
+      }
+    }
+  }
+  return null;
+}
+
 function useHint() {
   const game = appState.game;
-  if (!game || game.cleared || !game.selected) return;
-  const { r, c } = game.selected;
-  const cell = game.cells[r][c];
-  if (cell.fixed) return;
+  if (!game || game.cleared) return;
   if (game.hintUses >= HINT_LIMIT_PER_BOARD) return;
 
+  const target = findHintTarget(game);
+  if (!target) return;
+
+  const { r, c } = target;
+  const cell = game.cells[r][c];
   const answer = game.solution[r][c];
-  if (cell.value === answer) return;
 
   pushHistory();
+  game.selected = { r, c };
   cell.value = answer;
   cell.notes.clear();
   game.hintUses += 1;
@@ -545,6 +573,31 @@ function render() {
   const settings = appState.modal === 'settings'
     ? appState.settingsDraft.settings
     : appState.game?.settings ?? loadSettings();
+let fatalRendering = false;
+
+function showFatalScreen(error) {
+  if (fatalRendering) return;
+  fatalRendering = true;
+  console.error('Fatal render error:', error);
+  clearSave();
+  appState.game = null;
+  appState.modal = null;
+  appState.screen = 'home';
+  document.body.classList.remove('play-mode');
+  app.innerHTML = `
+    <main class="app-main">
+      <section class="screen home">
+        <h2>復旧のためデータを初期化しました</h2>
+        <p>画面表示で問題を検知したため、保存データを削除して安全モードで起動しています。</p>
+        <button class="primary" data-act="reload">再読み込み</button>
+      </section>
+    </main>`;
+  const reload = app.querySelector('button[data-act="reload"]');
+  if (reload) reload.onclick = () => window.location.reload();
+}
+
+function renderInternal() {
+  const settings = appState.game?.settings ?? loadSettings();
   document.body.classList.toggle('dark', settings.darkMode);
 
   let content = '';
@@ -561,6 +614,15 @@ function render() {
   app.innerHTML = `<main class="app-main ${appState.screen === 'play' ? 'play-main' : ''}">${content}${modal}${appState.toast ? `<div class="toast">${appState.toast}</div>` : ''}</main>`;
   wireEvents();
   requestPlayLayoutSync();
+}
+
+function render() {
+  try {
+    renderInternal();
+    fatalRendering = false;
+  } catch (error) {
+    showFatalScreen(error);
+  }
 }
 
 function wireEvents() {
@@ -721,6 +783,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') return inputValue(0);
 });
 
+window.addEventListener('error', (event) => {
+  if (event.error) showFatalScreen(event.error);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  showFatalScreen(event.reason);
+});
 window.addEventListener('beforeunload', serialize);
 window.addEventListener('resize', () => {
   updatePlayViewportHeight();
