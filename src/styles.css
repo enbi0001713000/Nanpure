@@ -32,25 +32,30 @@ body {
   background: var(--bg);
   color: var(--text);
 }
+
+:root {
+  --play-viewport-height: 100dvh;
+}
+
 main { max-width: 900px; margin: 0 auto; min-height: 100vh; padding: 16px; box-sizing: border-box; position: relative; }
 
 @supports (height: 100dvh) {
   body.play-mode,
   body.play-mode .app-main.play-main {
-    height: 100dvh;
-    min-height: 100dvh;
+    height: var(--play-viewport-height, 100dvh);
+    min-height: var(--play-viewport-height, 100dvh);
   }
 }
 
 body.play-mode {
-  height: 100vh;
+  height: var(--play-viewport-height, 100vh);
   overflow: hidden;
   touch-action: pan-x pan-y pinch-zoom;
 }
 
 body.play-mode .app-main.play-main {
-  height: 100vh;
-  min-height: 100vh;
+  height: var(--play-viewport-height, 100vh);
+  min-height: var(--play-viewport-height, 100vh);
   padding: 0;
   overflow: hidden;
 }
@@ -216,6 +221,7 @@ button.active { border: 2px solid #76d8ff; background: rgba(62, 98, 234, 0.55); 
   flex: 0 0 auto;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: rgba(4, 8, 40, 0.9);
+  border-top: 1px solid rgba(124, 206, 255, 0.25);
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
 }
 
