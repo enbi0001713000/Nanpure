@@ -53,19 +53,7 @@ function cloneSnapshot() {
     noteMode: game.noteMode
   };
 }
-
-function applySnapshot(snapshot) {
-  const game = appState.game;
-  game.cells.forEach((row, r) => {
-    row.forEach((cell, c) => {
-      const s = snapshot.grid[r][c];
-      cell.value = s.value;
-      cell.notes = new Set(s.notes);
-    });
-  });
-  game.selected = snapshot.selected;
-  game.noteMode = snapshot.noteMode;
-}
+@@ -66,91 +69,94 @@ function applySnapshot(snapshot) {
 
 function pushHistory() {
   const game = appState.game;
@@ -160,71 +148,7 @@ function startNewGame(difficulty) {
 
 function requestStartDifficulty(difficulty) {
   if (hasProgressGame()) {
-    const ok = window.confirm('現在のゲームを破棄して新規開始しますか？');
-    if (!ok) return;
-    clearSave();
-  }
-  appState.pendingDifficulty = difficulty;
-  const username = getUsername();
-  if (!validateName(username)) {
-    appState.usernameDraft = username;
-    appState.modal = 'username';
-    render();
-    return;
-  }
-  startNewGame(difficulty);
-}
-
-function showToast(text) {
-  appState.toast = text;
-  render();
-  window.clearTimeout(appState.toastTimer);
-  appState.toastTimer = window.setTimeout(() => {
-    appState.toast = '';
-    render();
-  }, 1800);
-}
-
-function formattedDifficultyLabel(difficulty) {
-  const map = { easy: 'EASY', medium: 'NORMAL', hard: 'HARD', oni: 'ONI' };
-  return map[difficulty] ?? difficulty.toUpperCase();
-}
-
-function formattedTime(ms) {
-  const totalSec = Math.floor(ms / 1000);
-  return `${String(Math.floor(totalSec / 60)).padStart(2, '0')}:${String(totalSec % 60).padStart(2, '0')}`;
-}
-
-function checkClear() {
-  if (appState.screen !== 'play' || !appState.game || appState.game.cleared) return;
-  const values = appState.game.cells.map((r) => r.map((c) => c.value));
-  if (!isCompleteAndValid(values)) return;
-  appState.game.cleared = true;
-  appState.game.timerRunning = false;
-  clearSave();
-  appState.modal = 'result';
-}
-
-function inputValue(value) {
-  const game = appState.game;
-  if (!game || game.cleared) return;
-  const pos = game.selected;
-  if (!pos) return;
-  const cell = game.cells[pos.r][pos.c];
-  if (cell.fixed) return;
-
-  pushHistory();
-  if (game.noteMode) {
-    if (value === 0) cell.notes.clear();
-    else if (cell.notes.has(value)) cell.notes.delete(value);
-    else cell.notes.add(value);
-  } else {
-    const next = cell.value === value && game.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-  checkClear();
-  render();
+@@ -222,50 +228,93 @@ function inputValue(value) {
   scheduleSave();
 }
 
@@ -250,18 +174,40 @@ function redo() {
   scheduleSave();
 }
 
+function findHintTarget(game) {
+  const selected = game.selected;
+  if (selected) {
+    const selectedCell = game.cells[selected.r][selected.c];
+    if (!selectedCell.fixed && selectedCell.value !== game.solution[selected.r][selected.c]) {
+      return selected;
+    }
+  }
+
+  for (let r = 0; r < 9; r += 1) {
+    for (let c = 0; c < 9; c += 1) {
+      const cell = game.cells[r][c];
+      if (!cell.fixed && cell.value !== game.solution[r][c]) {
+        return { r, c };
+      }
+    }
+  }
+  return null;
+}
+
 function useHint() {
   const game = appState.game;
-  if (!game || game.cleared || !game.selected) return;
-  const { r, c } = game.selected;
-  const cell = game.cells[r][c];
-  if (cell.fixed) return;
+  if (!game || game.cleared) return;
   if (game.hintUses >= HINT_LIMIT_PER_BOARD) return;
 
+  const target = findHintTarget(game);
+  if (!target) return;
+
+  const { r, c } = target;
+  const cell = game.cells[r][c];
   const answer = game.solution[r][c];
-  if (cell.value === answer) return;
 
   pushHistory();
+  game.selected = { r, c };
   cell.value = answer;
   cell.notes.clear();
   game.hintUses += 1;
@@ -296,56 +242,7 @@ function saveSettingsModal() {
 
 function shareText() {
   const game = appState.game;
-  const username = getUsername() || '匿名';
-  return `【${APP_TITLE}】${username} が ${formattedDifficultyLabel(game.difficulty)} を ${formattedTime(game.elapsedMs)} でクリア！\n\n#えびナンプレ`;
-}
-
-function shareUrl() {
-  const text = encodeURIComponent(shareText());
-  const url = encodeURIComponent(BASE_URL);
-  return `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
-}
-
-async function copyResult() {
-  const game = appState.game;
-  const username = getUsername() || '匿名';
-  const line = `【${APP_TITLE}】${username} が ${formattedDifficultyLabel(game.difficulty)} を ${formattedTime(game.elapsedMs)} でクリア！ #えびナンプレ ${BASE_URL}`;
-  try {
-    await navigator.clipboard.writeText(line);
-  } catch {
-    const textArea = document.createElement('textarea');
-    textArea.value = line;
-    document.body.appendChild(textArea);
-    textArea.select();
-    document.execCommand('copy');
-    textArea.remove();
-  }
-  showToast('コピーしました');
-}
-
-function renderHome() {
-  return `
-  <section class="screen home">
-    <div class="home-glow home-glow-left" aria-hidden="true"></div>
-    <div class="home-glow home-glow-right" aria-hidden="true"></div>
-    <div class="home-grid home-grid-left" aria-hidden="true"></div>
-    <div class="home-grid home-grid-right" aria-hidden="true"></div>
-    <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
-    <h1 class="home-title">ナンプレ</h1>
-    <p class="home-subtitle">-えびの挑戦状-</p>
-    <button class="primary cta" data-act="go-select">挑戦する</button>
-  </section>`;
-}
-
-function renderSelect() {
-  return `
-  <section class="screen select">
-    <div class="row between">
-      <button class="ghost" data-act="go-home">← ホームへ</button>
-      <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
-    </div>
-    <h2>難易度を選択</h2>
-    <div class="difficulty-grid">
+@@ -322,50 +371,51 @@ function renderSelect() {
       ${difficulties
         .map((d) => `<button class="primary" data-act="pick-difficulty" data-difficulty="${d}">${formattedDifficultyLabel(d)}</button>`)
         .join('')}
@@ -397,250 +294,7 @@ function renderPlay() {
             .join('')}
         </section>
       </section>
-      <section class="controls keypad">
-        ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}" ${game.cleared ? 'disabled' : ''}>${i + 1}</button>`).join('')}
-        <button data-num="0" ${game.cleared ? 'disabled' : ''}>消す</button>
-      </section>
-    </div>
-  </section>`;
-}
-
-function syncPlayBoardSize() {
-  if (appState.screen !== 'play') return;
-  const boardArea = app.querySelector('.board-area');
-  const board = app.querySelector('.board');
-  if (!boardArea || !board) return;
-  const minimumMargin = 16;
-  const availableWidth = boardArea.clientWidth - minimumMargin;
-  const availableHeight = boardArea.clientHeight - minimumMargin;
-  const size = Math.floor(Math.min(availableWidth, availableHeight));
-  if (size > 0) {
-    board.style.width = `${size}px`;
-    board.style.height = `${size}px`;
-    board.style.transformOrigin = 'center top';
-    board.style.transform = `scale(${boardScale})`;
-  }
-}
-
-function getTouchDistance(touchA, touchB) {
-  const dx = touchA.clientX - touchB.clientX;
-  const dy = touchA.clientY - touchB.clientY;
-  return Math.hypot(dx, dy);
-}
-
-function clampBoardScale(value) {
-  return Math.min(3, Math.max(1, value));
-}
-
-function bindBoardPinchZoom(boardArea) {
-  if (boardArea.dataset.pinchZoomBound === '1') return;
-  boardArea.dataset.pinchZoomBound = '1';
-
-  boardArea.addEventListener('touchstart', (event) => {
-    if (event.touches.length !== 2) return;
-    pinchStartDistance = getTouchDistance(event.touches[0], event.touches[1]);
-    pinchStartScale = boardScale;
-  });
-
-  boardArea.addEventListener(
-    'touchmove',
-    (event) => {
-      if (event.touches.length !== 2 || pinchStartDistance <= 0) return;
-      const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
-      const nextScale = clampBoardScale((pinchStartScale * currentDistance) / pinchStartDistance);
-      if (Math.abs(nextScale - boardScale) < 0.01) return;
-      boardScale = nextScale;
-      requestPlayLayoutSync();
-      event.preventDefault();
-    },
-    { passive: false }
-  );
-
-  boardArea.addEventListener('touchend', (event) => {
-    if (event.touches.length < 2) pinchStartDistance = 0;
-  });
-}
-
-function requestPlayLayoutSync() {
-  window.cancelAnimationFrame(layoutRaf);
-  layoutRaf = window.requestAnimationFrame(() => {
-    syncPlayBoardSize();
-  });
-}
-
-
-function updatePlayViewportHeight() {
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  document.documentElement.style.setProperty('--play-viewport-height', `${Math.round(viewportHeight)}px`);
-}
-
-function setupViewportListeners() {
-  const viewport = window.visualViewport;
-  if (!viewport) return;
-  if (typeof viewport.addEventListener !== 'function') return;
-  viewport.addEventListener('resize', () => {
-    updatePlayViewportHeight();
-    requestPlayLayoutSync();
-  });
-  viewport.addEventListener('scroll', () => {
-    updatePlayViewportHeight();
-    requestPlayLayoutSync();
-  });
-}
-
-function renderUsernameModal() {
-  return `
-  <div class="modal-overlay">
-    <div class="modal">
-      <h3>ユーザーネーム登録</h3>
-      <p>X共有・リンクコピーに表示されます（後から変更可能）</p>
-      <input data-role="username-input" maxlength="12" placeholder="例）燕尾" value="${appState.usernameDraft}" />
-      <div class="row">
-        <button class="primary" data-act="save-username">保存して開始</button>
-        <button data-act="anonymous-start">匿名で開始</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderSettingsModal() {
-  const draft = appState.settingsDraft;
-  return `
-  <div class="modal-overlay">
-    <div class="modal">
-      <div class="row between"><h3>設定</h3><button class="ghost" data-act="close-modal">×</button></div>
-      <label>ユーザーネーム<input data-role="settings-username" maxlength="12" value="${draft.username}" /></label>
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${draft.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
-      <button class="primary" data-act="save-settings">保存</button>
-    </div>
-  </div>`;
-}
-
-function renderResultModal() {
-  const game = appState.game;
-  const username = getUsername() || '匿名';
-  return `
-  <div class="modal-overlay">
-    <div class="modal result">
-      <div class="row between"><h2>CLEAR!</h2><button class="ghost" data-act="close-result">×</button></div>
-      <div class="result-card">
-        <div>ユーザー：${username}</div>
-        <div>難易度：${formattedDifficultyLabel(game.difficulty)}</div>
-        <div class="time">タイム：${formattedTime(game.elapsedMs)}</div>
-      </div>
-      <button class="primary wide" data-act="share-x">Xへ共有</button>
-      <div class="row">
-        <button data-act="copy-link">リンクコピー</button>
-        <button data-act="retry">もう一度（同難易度）</button>
-      </div>
-      <button class="link" data-act="result-home">ホームへ</button>
-    </div>
-  </div>`;
-}
-
-function render() {
-  const settings = appState.game?.settings ?? loadSettings();
-  document.body.classList.toggle('dark', settings.darkMode);
-
-  let content = '';
-  if (appState.screen === 'home') content = renderHome();
-  if (appState.screen === 'select') content = renderSelect();
-  if (appState.screen === 'play' && appState.game) content = renderPlay();
-
-  let modal = '';
-  if (appState.modal === 'username') modal = renderUsernameModal();
-  if (appState.modal === 'settings') modal = renderSettingsModal();
-  if (appState.modal === 'result') modal = renderResultModal();
-
-  document.body.classList.toggle('play-mode', appState.screen === 'play');
-  app.innerHTML = `<main class="app-main ${appState.screen === 'play' ? 'play-main' : ''}">${content}${modal}${appState.toast ? `<div class="toast">${appState.toast}</div>` : ''}</main>`;
-  wireEvents();
-  requestPlayLayoutSync();
-}
-
-function wireEvents() {
-  app.querySelectorAll('button[data-act="go-select"]').forEach((btn) => {
-    btn.onclick = () => {
-      appState.screen = 'select';
-      appState.modal = null;
-      render();
-    };
-  });
-
-  app.querySelectorAll('button[data-act="go-home"],button[data-act="result-home"]').forEach((btn) => {
-    btn.onclick = () => {
-      appState.screen = 'home';
-      appState.modal = null;
-      appState.game = null;
-      clearSave();
-      render();
-    };
-  });
-
-  app.querySelectorAll('button[data-act="pick-difficulty"]').forEach((btn) => {
-    btn.onclick = () => requestStartDifficulty(btn.dataset.difficulty);
-  });
-
-  app.querySelectorAll('button[data-act="open-settings"]').forEach((btn) => {
-    btn.onclick = openSettings;
-  });
-
-  const usernameInput = app.querySelector('input[data-role="username-input"]');
-  if (usernameInput) {
-    usernameInput.oninput = () => {
-      appState.usernameDraft = usernameInput.value;
-    };
-  }
-
-  const saveUsernameBtn = app.querySelector('button[data-act="save-username"]');
-  if (saveUsernameBtn) {
-    saveUsernameBtn.onclick = () => {
-      if (!validateName(appState.usernameDraft)) {
-        window.alert('ユーザーネームは1〜12文字で入力してください。');
-        return;
-      }
-      setUsername(normalizeName(appState.usernameDraft));
-      startNewGame(appState.pendingDifficulty || 'easy');
-      scheduleSave();
-    };
-  }
-
-  const anonymousBtn = app.querySelector('button[data-act="anonymous-start"]');
-  if (anonymousBtn) {
-    anonymousBtn.onclick = () => {
-      setUsername('匿名');
-      startNewGame(appState.pendingDifficulty || 'easy');
-      scheduleSave();
-    };
-  }
-
-  const closeModalBtn = app.querySelector('button[data-act="close-modal"]');
-  if (closeModalBtn) {
-    closeModalBtn.onclick = () => {
-      appState.modal = null;
-      render();
-    };
-  }
-
-  const settingsUsername = app.querySelector('input[data-role="settings-username"]');
-  if (settingsUsername) {
-    settingsUsername.oninput = () => {
-      appState.settingsDraft.username = settingsUsername.value;
-    };
-  }
-
-  app.querySelectorAll('input[data-setting]').forEach((el) => {
-    el.onchange = () => {
-      appState.settingsDraft.settings[el.dataset.setting] = el.checked;
-    };
-  });
-
-  const saveSettingsBtn = app.querySelector('button[data-act="save-settings"]');
-  if (saveSettingsBtn) saveSettingsBtn.onclick = saveSettingsModal;
-
-  if (appState.screen === 'play' && appState.game) {
+@@ -616,50 +666,51 @@ function wireEvents() {
     const boardArea = app.querySelector('.board-area');
     if (boardArea) bindBoardPinchZoom(boardArea);
 
@@ -692,41 +346,3 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') next.r = Math.max(0, r - 1);
     if (e.key === 'ArrowDown') next.r = Math.min(8, r + 1);
     if (e.key === 'ArrowLeft') next.c = Math.max(0, c - 1);
-    if (e.key === 'ArrowRight') next.c = Math.min(8, c + 1);
-    game.selected = next;
-    render();
-    return;
-  }
-
-  if (game.cleared) return;
-  if (e.ctrlKey && e.key.toLowerCase() === 'z') return undo();
-  if (e.ctrlKey && e.key.toLowerCase() === 'y') return redo();
-  if (e.key.toLowerCase() === 'n') {
-    game.noteMode = !game.noteMode;
-    return render();
-  }
-  if (/^[1-9]$/.test(e.key)) return inputValue(Number(e.key));
-  if (e.key === 'Backspace' || e.key === 'Delete') return inputValue(0);
-});
-
-window.addEventListener('beforeunload', serialize);
-window.addEventListener('resize', () => {
-  updatePlayViewportHeight();
-  requestPlayLayoutSync();
-});
-window.addEventListener('orientationchange', () => {
-  updatePlayViewportHeight();
-  requestPlayLayoutSync();
-});
-updatePlayViewportHeight();
-setupViewportListeners();
-setInterval(() => {
-  if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
-  appState.game.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) meta.textContent = `${formattedDifficultyLabel(appState.game.difficulty)} / ${formattedTime(appState.game.elapsedMs)}`;
-  scheduleSave();
-}, 1000);
-
-restoreSave();
-render();

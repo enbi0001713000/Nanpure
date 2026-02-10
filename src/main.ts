@@ -1,8 +1,8 @@
 import './styles.css';
 import { getRandomPuzzle } from './core/puzzleBank';
 import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku';
-import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types';
-import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence';
+import type { Cell, Difficulty, HistorySnapshot, Position, Settings } from './core/types';
+import { clearSave, loadSave, loadSettings, saveGame, saveSettings } from './store/persistence';
 
 type State = {
   difficulty: Difficulty;
@@ -17,8 +17,6 @@ type State = {
   timerRunning: boolean;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
-  stats: GameStats;
-  clearRecorded: boolean;
 };
 
 let state: State;
@@ -41,14 +39,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
       cell.notes = new Set(s.notes);
     });
   });
-  state.selected = snapshot.selected;
-  state.noteMode = snapshot.noteMode;
-}
-
-function pushHistory() {
-  state.history.push(cloneSnapshot());
-  if (state.history.length > 200) state.history.shift();
-  state.future = [];
+@@ -49,94 +50,97 @@ function pushHistory() {
 }
 
 function createCells(values: number[][], initial: number[][]): Cell[][] {
@@ -77,9 +68,7 @@ function newGame(difficulty: Difficulty) {
     hintUses: 0,
     timerRunning: true,
     history: [],
-    future: [],
-    stats: loadStats(),
-    clearRecorded: false
+    future: []
   };
   render();
 }
@@ -106,9 +95,7 @@ function restoreOrBoot() {
     hintUses: save.hintUses,
     timerRunning: true,
     history: save.history,
-    future: save.future,
-    stats: loadStats(),
-    clearRecorded: false
+    future: save.future
   };
   render();
 }
@@ -150,21 +137,7 @@ function inputValue(value: number) {
 
   if (state.noteMode) {
     if (value === 0) {
-      cell.notes.clear();
-    } else if (cell.notes.has(value)) {
-      cell.notes.delete(value);
-    } else {
-      cell.notes.add(value);
-    }
-  } else {
-    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-
-  render();
-  scheduleSave();
-}
+@@ -158,82 +162,124 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
@@ -193,17 +166,36 @@ function toggleSetting(key: keyof Settings) {
 const HINT_LIMIT_PER_BOARD = 3;
 const HINT_PENALTY_MS = 30_000;
 
+function findHintTarget(): Position | null {
+  if (state.selected) {
+    const selectedCell = state.cells[state.selected.r][state.selected.c];
+    if (!selectedCell.fixed && selectedCell.value !== state.solution[state.selected.r][state.selected.c]) {
+      return state.selected;
+    }
+  }
+
+  for (let r = 0; r < 9; r += 1) {
+    for (let c = 0; c < 9; c += 1) {
+      const cell = state.cells[r][c];
+      if (!cell.fixed && cell.value !== state.solution[r][c]) {
+        return { r, c };
+      }
+    }
+  }
+  return null;
+}
+
 function useHint() {
-  const pos = state.selected;
-  if (!pos) return;
-  const cell = state.cells[pos.r][pos.c];
-  if (cell.fixed) return;
   if (state.hintUses >= HINT_LIMIT_PER_BOARD) return;
 
+  const pos = findHintTarget();
+  if (!pos) return;
+
+  const cell = state.cells[pos.r][pos.c];
   const answer = state.solution[pos.r][pos.c];
-  if (cell.value === answer) return;
 
   pushHistory();
+  state.selected = pos;
   cell.value = answer;
   cell.notes.clear();
   state.hintUses += 1;
@@ -219,31 +211,22 @@ function formattedTime(ms: number) {
   return `${m}:${s}`;
 }
 
-function formattedBestTime(ms: number | null) {
-  return ms === null ? '--:--' : formattedTime(ms);
-}
-
 function render() {
   document.body.classList.toggle('dark', state.settings.darkMode);
   const values = state.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
   const selectedValue = state.selected ? values[state.selected.r][state.selected.c] : 0;
   const cleared = isCompleteAndValid(values);
-  const difficultyStats = state.stats[state.difficulty];
   if (cleared) {
     state.timerRunning = false;
-    if (!state.clearRecorded) {
-      state.clearRecorded = true;
-      clearSave();
-      state.stats = recordClearStats(state.difficulty, state.elapsedMs);
-    }
+    clearSave();
   }
 
   app.innerHTML = `
   <main>
     <header>
       <h1>Nanpure Web</h1>
-      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}</div>
     </header>
     <section class="controls top">
       <button data-new="easy">易</button>
@@ -279,36 +262,7 @@ function render() {
               }
               const notes = Array.from({ length: 9 }, (_, i) =>
                 cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>'
-              ).join('');
-              return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
-            })
-            .join('')
-        )
-        .join('')}
-    </section>
-    <section class="controls keypad">
-      ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
-      <button data-num="0">消す</button>
-    </section>
-    <section class="settings">
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
-    </section>
-    ${
-      cleared
-        ? `<div class="clear">クリア！ 今回タイム: ${formattedTime(state.elapsedMs)} / ベストタイム: ${formattedBestTime(
-            difficultyStats.bestMs
-          )} / 累計クリア: ${difficultyStats.clearCount}</div>`
-        : ''
-    }
-  </main>`;
-
-  wireEvents();
-}
-
-function wireEvents() {
-  app.querySelectorAll<HTMLButtonElement>('button[data-cell]').forEach((btn) => {
+@@ -264,50 +310,51 @@ function wireEvents() {
     btn.onclick = () => {
       const [r, c] = (btn.dataset.cell ?? '0,0').split(',').map(Number);
       setSelected({ r, c });
@@ -360,15 +314,3 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
-setInterval(() => {
-  if (!state?.timerRunning) return;
-  state.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) {
-    const difficultyStats = state.stats[state.difficulty];
-    meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
-  }
-  scheduleSave();
-}, 1000);
-
-restoreOrBoot();
