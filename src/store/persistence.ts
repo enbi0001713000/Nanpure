@@ -10,6 +10,7 @@ export type SaveData = {
   selected: { r: number; c: number } | null;
   noteMode: boolean;
   elapsedMs: number;
+  hintUses: number;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
 };
@@ -61,7 +62,10 @@ export function loadSave(): SaveData | null {
     localStorage.removeItem(SAVE_KEY);
     return null;
   }
-  return save as SaveData;
+  return {
+    ...(save as SaveData),
+    hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0
+  };
 }
 
 export function saveGame(data: SaveData) {
