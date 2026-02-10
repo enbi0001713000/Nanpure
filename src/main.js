@@ -440,12 +440,24 @@ function requestPlayLayoutSync() {
   });
 }
 
+
+function updatePlayViewportHeight() {
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.style.setProperty('--play-viewport-height', `${Math.round(viewportHeight)}px`);
+}
+
 function setupViewportListeners() {
   const viewport = window.visualViewport;
   if (!viewport) return;
   if (typeof viewport.addEventListener !== 'function') return;
-  viewport.addEventListener('resize', requestPlayLayoutSync);
-  viewport.addEventListener('scroll', requestPlayLayoutSync);
+  viewport.addEventListener('resize', () => {
+    updatePlayViewportHeight();
+    requestPlayLayoutSync();
+  });
+  viewport.addEventListener('scroll', () => {
+    updatePlayViewportHeight();
+    requestPlayLayoutSync();
+  });
 }
 
 function renderUsernameModal() {
@@ -669,8 +681,15 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
-window.addEventListener('resize', requestPlayLayoutSync);
-window.addEventListener('orientationchange', requestPlayLayoutSync);
+window.addEventListener('resize', () => {
+  updatePlayViewportHeight();
+  requestPlayLayoutSync();
+});
+window.addEventListener('orientationchange', () => {
+  updatePlayViewportHeight();
+  requestPlayLayoutSync();
+});
+updatePlayViewportHeight();
 setupViewportListeners();
 setInterval(() => {
   if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
