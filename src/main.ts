@@ -315,6 +315,7 @@ function renderInternal() {
       <button data-num="0">消す</button>
     </section>
     <section class="settings">
+      <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
       <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
