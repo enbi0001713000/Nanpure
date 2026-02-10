@@ -2,7 +2,7 @@ const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
 const DEFAULT_SETTINGS = {
-  darkMode: false,
+  darkMode: true,
   mistakeHighlight: true,
   highlightSameNumber: true,
   toggleToErase: true
@@ -25,7 +25,7 @@ export function loadSettings() {
     return { ...DEFAULT_SETTINGS };
   }
   return {
-    darkMode: !!parsed.darkMode,
+    darkMode: true,
     mistakeHighlight: parsed.mistakeHighlight !== false,
     highlightSameNumber: parsed.highlightSameNumber !== false,
     toggleToErase: parsed.toggleToErase !== false
