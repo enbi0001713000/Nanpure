@@ -137,7 +137,7 @@ function inputValue(value: number) {
 
   if (state.noteMode) {
     if (value === 0) {
-@@ -158,82 +162,124 @@ function inputValue(value: number) {
+@@ -158,165 +162,243 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
@@ -211,7 +211,27 @@ function formattedTime(ms: number) {
   return `${m}:${s}`;
 }
 
-function render() {
+let fatalRendering = false;
+
+function showFatalScreen(error: unknown) {
+  if (fatalRendering) return;
+  fatalRendering = true;
+  console.error('Fatal render error:', error);
+  clearSave();
+  document.body.classList.remove('play-mode');
+  app.innerHTML = `
+    <main>
+      <section class="screen home">
+        <h2>復旧のためデータを初期化しました</h2>
+        <p>画面表示で問題を検知したため、保存データを削除して安全モードで起動しています。</p>
+        <button class="primary" data-act="reload">再読み込み</button>
+      </section>
+    </main>`;
+  const reload = app.querySelector<HTMLButtonElement>('button[data-act="reload"]');
+  if (reload) reload.onclick = () => window.location.reload();
+}
+
+function renderInternal() {
   document.body.classList.toggle('dark', state.settings.darkMode);
   const values = state.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
@@ -262,7 +282,39 @@ function render() {
               }
               const notes = Array.from({ length: 9 }, (_, i) =>
                 cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>'
-@@ -264,50 +310,51 @@ function wireEvents() {
+              ).join('');
+              return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
+            })
+            .join('')
+        )
+        .join('')}
+    </section>
+    <section class="controls keypad">
+      ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
+      <button data-num="0">消す</button>
+    </section>
+    <section class="settings">
+      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
+      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
+      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
+    </section>
+    ${cleared ? `<div class="clear">クリア！ ${formattedTime(state.elapsedMs)}</div>` : ''}
+  </main>`;
+
+  wireEvents();
+}
+
+function render() {
+  try {
+    renderInternal();
+    fatalRendering = false;
+  } catch (error) {
+    showFatalScreen(error);
+  }
+}
+
+function wireEvents() {
+  app.querySelectorAll<HTMLButtonElement>('button[data-cell]').forEach((btn) => {
     btn.onclick = () => {
       const [r, c] = (btn.dataset.cell ?? '0,0').split(',').map(Number);
       setSelected({ r, c });
@@ -313,4 +365,19 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') return inputValue(0);
 });
 
+window.addEventListener('error', (event) => {
+  if (event.error) showFatalScreen(event.error);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  showFatalScreen(event.reason);
+});
 window.addEventListener('beforeunload', serialize);
+setInterval(() => {
+  if (!state?.timerRunning) return;
+  state.elapsedMs += 1000;
+  const meta = app.querySelector('.meta');
+  if (meta) meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}`;
+  scheduleSave();
+}, 1000);
+
+restoreOrBoot();

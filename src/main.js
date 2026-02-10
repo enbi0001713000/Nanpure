@@ -294,7 +294,110 @@ function renderPlay() {
             .join('')}
         </section>
       </section>
-@@ -616,50 +666,51 @@ function wireEvents() {
+@@ -490,70 +540,102 @@ function renderSettingsModal() {
+  </div>`;
+}
+
+function renderResultModal() {
+  const game = appState.game;
+  const username = getUsername() || '匿名';
+  return `
+  <div class="modal-overlay">
+    <div class="modal result">
+      <div class="row between"><h2>CLEAR!</h2><button class="ghost" data-act="close-result">×</button></div>
+      <div class="result-card">
+        <div>ユーザー：${username}</div>
+        <div>難易度：${formattedDifficultyLabel(game.difficulty)}</div>
+        <div class="time">タイム：${formattedTime(game.elapsedMs)}</div>
+      </div>
+      <button class="primary wide" data-act="share-x">Xへ共有</button>
+      <div class="row">
+        <button data-act="copy-link">リンクコピー</button>
+        <button data-act="retry">もう一度（同難易度）</button>
+      </div>
+      <button class="link" data-act="result-home">ホームへ</button>
+    </div>
+  </div>`;
+}
+
+let fatalRendering = false;
+
+function showFatalScreen(error) {
+  if (fatalRendering) return;
+  fatalRendering = true;
+  console.error('Fatal render error:', error);
+  clearSave();
+  appState.game = null;
+  appState.modal = null;
+  appState.screen = 'home';
+  document.body.classList.remove('play-mode');
+  app.innerHTML = `
+    <main class="app-main">
+      <section class="screen home">
+        <h2>復旧のためデータを初期化しました</h2>
+        <p>画面表示で問題を検知したため、保存データを削除して安全モードで起動しています。</p>
+        <button class="primary" data-act="reload">再読み込み</button>
+      </section>
+    </main>`;
+  const reload = app.querySelector('button[data-act="reload"]');
+  if (reload) reload.onclick = () => window.location.reload();
+}
+
+function renderInternal() {
+  const settings = appState.game?.settings ?? loadSettings();
+  document.body.classList.toggle('dark', settings.darkMode);
+
+  let content = '';
+  if (appState.screen === 'home') content = renderHome();
+  if (appState.screen === 'select') content = renderSelect();
+  if (appState.screen === 'play' && appState.game) content = renderPlay();
+
+  let modal = '';
+  if (appState.modal === 'username') modal = renderUsernameModal();
+  if (appState.modal === 'settings') modal = renderSettingsModal();
+  if (appState.modal === 'result') modal = renderResultModal();
+
+  document.body.classList.toggle('play-mode', appState.screen === 'play');
+  app.innerHTML = `<main class="app-main ${appState.screen === 'play' ? 'play-main' : ''}">${content}${modal}${appState.toast ? `<div class="toast">${appState.toast}</div>` : ''}</main>`;
+  wireEvents();
+  requestPlayLayoutSync();
+}
+
+function render() {
+  try {
+    renderInternal();
+    fatalRendering = false;
+  } catch (error) {
+    showFatalScreen(error);
+  }
+}
+
+function wireEvents() {
+  app.querySelectorAll('button[data-act="go-select"]').forEach((btn) => {
+    btn.onclick = () => {
+      appState.screen = 'select';
+      appState.modal = null;
+      render();
+    };
+  });
+
+  app.querySelectorAll('button[data-act="go-home"],button[data-act="result-home"]').forEach((btn) => {
+    btn.onclick = () => {
+      appState.screen = 'home';
+      appState.modal = null;
+      appState.game = null;
+      clearSave();
+      render();
+    };
+  });
+
+  app.querySelectorAll('button[data-act="pick-difficulty"]').forEach((btn) => {
+    btn.onclick = () => requestStartDifficulty(btn.dataset.difficulty);
+  });
+
+  app.querySelectorAll('button[data-act="open-settings"]').forEach((btn) => {
+    btn.onclick = openSettings;
+@@ -616,88 +698,95 @@ function wireEvents() {
     const boardArea = app.querySelector('.board-area');
     if (boardArea) bindBoardPinchZoom(boardArea);
 
@@ -346,3 +449,47 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') next.r = Math.max(0, r - 1);
     if (e.key === 'ArrowDown') next.r = Math.min(8, r + 1);
     if (e.key === 'ArrowLeft') next.c = Math.max(0, c - 1);
+    if (e.key === 'ArrowRight') next.c = Math.min(8, c + 1);
+    game.selected = next;
+    render();
+    return;
+  }
+
+  if (game.cleared) return;
+  if (e.ctrlKey && e.key.toLowerCase() === 'z') return undo();
+  if (e.ctrlKey && e.key.toLowerCase() === 'y') return redo();
+  if (e.key.toLowerCase() === 'n') {
+    game.noteMode = !game.noteMode;
+    return render();
+  }
+  if (/^[1-9]$/.test(e.key)) return inputValue(Number(e.key));
+  if (e.key === 'Backspace' || e.key === 'Delete') return inputValue(0);
+});
+
+window.addEventListener('error', (event) => {
+  if (event.error) showFatalScreen(event.error);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  showFatalScreen(event.reason);
+});
+window.addEventListener('beforeunload', serialize);
+window.addEventListener('resize', () => {
+  updatePlayViewportHeight();
+  requestPlayLayoutSync();
+});
+window.addEventListener('orientationchange', () => {
+  updatePlayViewportHeight();
+  requestPlayLayoutSync();
+});
+updatePlayViewportHeight();
+setupViewportListeners();
+setInterval(() => {
+  if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
+  appState.game.elapsedMs += 1000;
+  const meta = app.querySelector('.meta');
+  if (meta) meta.textContent = `${formattedDifficultyLabel(appState.game.difficulty)} / ${formattedTime(appState.game.elapsedMs)}`;
+  scheduleSave();
+}, 1000);
+
+restoreSave();
+render();
