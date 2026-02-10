@@ -39,14 +39,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
       cell.notes = new Set(s.notes);
     });
   });
-  state.selected = snapshot.selected;
-  state.noteMode = snapshot.noteMode;
-}
-
-function pushHistory() {
-  state.history.push(cloneSnapshot());
-  if (state.history.length > 200) state.history.shift();
-  state.future = [];
+@@ -49,94 +50,97 @@ function pushHistory() {
 }
 
 function createCells(values: number[][], initial: number[][]): Cell[][] {
@@ -144,21 +137,7 @@ function inputValue(value: number) {
 
   if (state.noteMode) {
     if (value === 0) {
-      cell.notes.clear();
-    } else if (cell.notes.has(value)) {
-      cell.notes.delete(value);
-    } else {
-      cell.notes.add(value);
-    }
-  } else {
-    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-
-  render();
-  scheduleSave();
-}
+@@ -158,82 +162,124 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
@@ -283,30 +262,7 @@ function render() {
               }
               const notes = Array.from({ length: 9 }, (_, i) =>
                 cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>'
-              ).join('');
-              return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
-            })
-            .join('')
-        )
-        .join('')}
-    </section>
-    <section class="controls keypad">
-      ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
-      <button data-num="0">消す</button>
-    </section>
-    <section class="settings">
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
-    </section>
-    ${cleared ? `<div class="clear">クリア！ ${formattedTime(state.elapsedMs)}</div>` : ''}
-  </main>`;
-
-  wireEvents();
-}
-
-function wireEvents() {
-  app.querySelectorAll<HTMLButtonElement>('button[data-cell]').forEach((btn) => {
+@@ -264,50 +310,51 @@ function wireEvents() {
     btn.onclick = () => {
       const [r, c] = (btn.dataset.cell ?? '0,0').split(',').map(Number);
       setSelected({ r, c });
@@ -358,12 +314,3 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
-setInterval(() => {
-  if (!state?.timerRunning) return;
-  state.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}`;
-  scheduleSave();
-}, 1000);
-
-restoreOrBoot();
