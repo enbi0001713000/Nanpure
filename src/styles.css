@@ -236,15 +236,19 @@ button.active { border: 2px solid #76d8ff; background: rgba(62, 98, 234, 0.55); 
 }
 
 .cell {
+  display: grid;
+  place-items: center;
   min-width: 0;
   aspect-ratio: 1;
   border: 1px solid rgba(126, 175, 255, 0.45);
   font-size: clamp(18px, 3.5vw, 30px);
+  line-height: 1;
   font-weight: 500;
   color: #ebfbff;
   text-shadow: 0 0 8px rgba(112, 218, 255, 0.62);
   border-radius: 0;
   padding: 0;
+  overflow: hidden;
   background: rgba(4, 14, 49, 0.76);
 }
 
