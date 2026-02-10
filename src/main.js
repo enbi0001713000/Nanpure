@@ -44,7 +44,7 @@ function cloneSnapshot() {
   return {
     grid: game.cells.map((row) => row.map((cell) => ({ value: cell.value, notes: [...cell.notes] }))),
     selected: game.selected,
-@@ -301,89 +303,120 @@ function renderHome() {
+@@ -301,89 +303,123 @@ function renderHome() {
 
 function renderSelect() {
   return `
@@ -135,9 +135,12 @@ function requestPlayLayoutSync() {
   });
 }
 
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', requestPlayLayoutSync);
-  window.visualViewport.addEventListener('scroll', requestPlayLayoutSync);
+function setupViewportListeners() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  if (typeof viewport.addEventListener !== 'function') return;
+  viewport.addEventListener('resize', requestPlayLayoutSync);
+  viewport.addEventListener('scroll', requestPlayLayoutSync);
 }
 
 function renderUsernameModal() {
@@ -165,7 +168,7 @@ function renderSettingsModal() {
       <label><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label><input data-setting="darkMode" type="checkbox" ${draft.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
-@@ -407,52 +440,54 @@ function renderResultModal() {
+@@ -407,52 +443,54 @@ function renderResultModal() {
       </div>
       <button class="primary wide" data-act="share-x">Xへ共有</button>
       <div class="row">
@@ -220,7 +223,7 @@ function wireEvents() {
     btn.onclick = () => requestStartDifficulty(btn.dataset.difficulty);
   });
 
-@@ -556,35 +591,37 @@ document.addEventListener('keydown', (e) => {
+@@ -556,35 +594,38 @@ document.addEventListener('keydown', (e) => {
   const { r, c } = game.selected;
 
   if (e.key.startsWith('Arrow')) {
@@ -248,6 +251,7 @@ function wireEvents() {
 window.addEventListener('beforeunload', serialize);
 window.addEventListener('resize', requestPlayLayoutSync);
 window.addEventListener('orientationchange', requestPlayLayoutSync);
+setupViewportListeners();
 setInterval(() => {
   if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
   appState.game.elapsedMs += 1000;
