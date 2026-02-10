@@ -13,6 +13,7 @@ type State = {
   noteMode: boolean;
   settings: Settings;
   elapsedMs: number;
+  hintUses: number;
   timerRunning: boolean;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
@@ -71,6 +72,7 @@ function newGame(difficulty: Difficulty) {
     noteMode: false,
     settings: loadSettings(),
     elapsedMs: 0,
+    hintUses: 0,
     timerRunning: true,
     history: [],
     future: []
@@ -97,6 +99,7 @@ function restoreOrBoot() {
     noteMode: save.noteMode,
     settings,
     elapsedMs: save.elapsedMs,
+    hintUses: save.hintUses,
     timerRunning: true,
     history: save.history,
     future: save.future
@@ -115,6 +118,7 @@ function serialize() {
     selected: state.selected,
     noteMode: state.noteMode,
     elapsedMs: state.elapsedMs,
+    hintUses: state.hintUses,
     history: state.history,
     future: state.future
   });
@@ -180,6 +184,47 @@ function toggleSetting(key: keyof Settings) {
   render();
 }
 
+const HINT_LIMIT_PER_BOARD = 3;
+const HINT_PENALTY_MS = 30_000;
+
+function findHintTarget(): Position | null {
+  if (state.selected) {
+    const selectedCell = state.cells[state.selected.r][state.selected.c];
+    if (!selectedCell.fixed && selectedCell.value !== state.solution[state.selected.r][state.selected.c]) {
+      return state.selected;
+    }
+  }
+
+  for (let r = 0; r < 9; r += 1) {
+    for (let c = 0; c < 9; c += 1) {
+      const cell = state.cells[r][c];
+      if (!cell.fixed && cell.value !== state.solution[r][c]) {
+        return { r, c };
+      }
+    }
+  }
+  return null;
+}
+
+function useHint() {
+  if (state.hintUses >= HINT_LIMIT_PER_BOARD) return;
+
+  const pos = findHintTarget();
+  if (!pos) return;
+
+  const cell = state.cells[pos.r][pos.c];
+  const answer = state.solution[pos.r][pos.c];
+
+  pushHistory();
+  state.selected = pos;
+  cell.value = answer;
+  cell.notes.clear();
+  state.hintUses += 1;
+  state.elapsedMs += HINT_PENALTY_MS;
+  render();
+  scheduleSave();
+}
+
 function formattedTime(ms: number) {
   const totalSec = Math.floor(ms / 1000);
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
@@ -212,6 +257,7 @@ function render() {
       <button data-act="undo">Undo</button>
       <button data-act="redo">Redo</button>
       <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
+      <button data-act="hint" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>ヒント (${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)})</button>
     </section>
     <section class="board" role="grid" aria-label="ナンプレ盤面">
       ${state.cells
@@ -286,6 +332,7 @@ function wireEvents() {
     state.noteMode = !state.noteMode;
     render();
   };
+  byAct('hint')!.onclick = useHint;
 }
 
 document.addEventListener('keydown', (e) => {

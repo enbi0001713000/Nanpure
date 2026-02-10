@@ -10,12 +10,43 @@ export type SaveData = {
   selected: { r: number; c: number } | null;
   noteMode: boolean;
   elapsedMs: number;
+  hintUses: number;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
 };
 
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
+
+
+function isNumberGrid(grid: unknown): grid is number[][] {
+  return (
+    Array.isArray(grid) &&
+    grid.length === 9 &&
+    grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => Number.isInteger(v)))
+  );
+}
+
+function isBooleanGrid(grid: unknown): grid is boolean[][] {
+  return (
+    Array.isArray(grid) &&
+    grid.length === 9 &&
+    grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => typeof v === 'boolean'))
+  );
+}
+
+function isNotesGrid(notes: unknown): notes is number[][][] {
+  return (
+    Array.isArray(notes) &&
+    notes.length === 9 &&
+    notes.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 9 &&
+        row.every((cell) => Array.isArray(cell) && cell.every((n) => Number.isInteger(n) && n >= 1 && n <= 9))
+    )
+  );
+}
 
 const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
@@ -57,11 +88,16 @@ export function loadSave(): SaveData | null {
   const parsed = readJson(SAVE_KEY);
   if (!parsed || typeof parsed !== 'object') return null;
   const save = parsed as Partial<SaveData>;
-  if (!Array.isArray(save.values) || !Array.isArray(save.fixed) || !Array.isArray(save.notes)) {
+  if (!isNumberGrid(save.values) || !isBooleanGrid(save.fixed) || !isNotesGrid(save.notes)) {
     localStorage.removeItem(SAVE_KEY);
     return null;
   }
-  return save as SaveData;
+  return {
+    ...(save as SaveData),
+    history: Array.isArray(save.history) ? save.history : [],
+    future: Array.isArray(save.future) ? save.future : [],
+    hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0
+  };
 }
 
 export function saveGame(data: SaveData) {
