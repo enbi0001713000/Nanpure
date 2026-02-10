@@ -541,6 +541,7 @@ function renderSettingsModal() {
       <label class="setting-check"><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label class="setting-check"><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${draft.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
+      <button class="theme-toggle-btn" data-act="toggle-darkmode">${draft.settings.darkMode ? '☀️ ライトモードに切替' : '🌙 ダークモードに切替'}</button>
       <button class="primary" data-act="save-settings">保存</button>
     </div>
   </div>`;
@@ -696,6 +697,15 @@ function wireEvents() {
       appState.settingsDraft.settings[el.dataset.setting] = el.checked;
     };
   });
+
+
+  const toggleDarkModeBtn = app.querySelector('button[data-act="toggle-darkmode"]');
+  if (toggleDarkModeBtn) {
+    toggleDarkModeBtn.onclick = () => {
+      appState.settingsDraft.settings.darkMode = !appState.settingsDraft.settings.darkMode;
+      render();
+    };
+  }
 
   const saveSettingsBtn = app.querySelector('button[data-act="save-settings"]');
   if (saveSettingsBtn) saveSettingsBtn.onclick = saveSettingsModal;
