@@ -19,6 +19,7 @@ type State = {
   future: HistorySnapshot[];
   stats: GameStats;
   clearRecorded: boolean;
+  settingsOpen: boolean;
 };
 
 let state: State;
@@ -79,7 +80,8 @@ function newGame(difficulty: Difficulty) {
     history: [],
     future: [],
     stats: loadStats(),
-    clearRecorded: false
+    clearRecorded: false,
+    settingsOpen: false
   };
   render();
 }
@@ -108,7 +110,8 @@ function restoreOrBoot() {
     history: save.history,
     future: save.future,
     stats: loadStats(),
-    clearRecorded: false
+    clearRecorded: false,
+    settingsOpen: false
   };
   render();
 }
@@ -190,6 +193,11 @@ function toggleSetting(key: keyof Settings) {
   render();
 }
 
+function toggleSettingsPanel() {
+  state.settingsOpen = !state.settingsOpen;
+  render();
+}
+
 const HINT_LIMIT_PER_BOARD = 3;
 const HINT_PENALTY_MS = 30_000;
 
@@ -244,6 +252,7 @@ function render() {
     <header>
       <h1>Nanpure Web</h1>
       <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+      <button data-act="settings" class="icon-button settings-button" aria-expanded="${state.settingsOpen}" aria-label="設定を開く">⚙️</button>
     </header>
     <section class="controls top">
       <button data-new="easy">易</button>
@@ -253,7 +262,9 @@ function render() {
       <button data-act="undo">Undo</button>
       <button data-act="redo">Redo</button>
       <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
-      <button data-act="hint" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>ヒント (${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)})</button>
+    </section>
+    <section class="controls penalty-controls">
+      <button data-act="hint" class="penalty-button" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>罰ヒント（-30秒） 残り${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)}回</button>
     </section>
     <section class="board" role="grid" aria-label="ナンプレ盤面">
       ${state.cells
@@ -290,7 +301,8 @@ function render() {
       ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
       <button data-num="0">消す</button>
     </section>
-    <section class="settings">
+    <section class="settings ${state.settingsOpen ? 'open' : ''}">
+      <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
       <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
@@ -335,6 +347,7 @@ function wireEvents() {
     render();
   };
   byAct('hint')!.onclick = useHint;
+  byAct('settings')!.onclick = toggleSettingsPanel;
 }
 
 document.addEventListener('keydown', (e) => {
