@@ -1,6 +1,26 @@
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
+function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+function safeRemoveItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
 
 function isNumberGrid(grid) {
   return Array.isArray(grid) && grid.length === 9 && grid.every((row) => Array.isArray(row) && row.length === 9 && row.every((v) => Number.isInteger(v)));
@@ -31,12 +51,12 @@ const DEFAULT_SETTINGS = {
 };
 
 function readJson(key) {
-  const raw = localStorage.getItem(key);
+  const raw = safeGetItem(key);
   if (!raw) return null;
   try {
     return JSON.parse(raw);
   } catch {
-    localStorage.removeItem(key);
+    safeRemoveItem(key);
     return null;
   }
 }
@@ -55,14 +75,14 @@ export function loadSettings() {
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  safeSetItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function loadSave() {
   const parsed = readJson(SAVE_KEY);
   if (!parsed || typeof parsed !== 'object') return null;
   if (!isNumberGrid(parsed.values) || !isBooleanGrid(parsed.fixed) || !isNotesGrid(parsed.notes)) {
-    localStorage.removeItem(SAVE_KEY);
+    safeRemoveItem(SAVE_KEY);
     return null;
   }
 
@@ -75,9 +95,9 @@ export function loadSave() {
 }
 
 export function saveGame(data) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  safeSetItem(SAVE_KEY, JSON.stringify(data));
 }
 
 export function clearSave() {
-  localStorage.removeItem(SAVE_KEY);
+  safeRemoveItem(SAVE_KEY);
 }

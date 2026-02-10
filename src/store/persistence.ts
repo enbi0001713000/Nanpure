@@ -18,6 +18,26 @@ export type SaveData = {
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+function safeRemoveItem(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
 
 function isNumberGrid(grid: unknown): grid is number[][] {
   return (
@@ -56,12 +76,12 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 function readJson(key: string): unknown {
-  const raw = localStorage.getItem(key);
+  const raw = safeGetItem(key);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as unknown;
   } catch {
-    localStorage.removeItem(key);
+    safeRemoveItem(key);
     return null;
   }
 }
@@ -81,7 +101,7 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(settings: Settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  safeSetItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function loadSave(): SaveData | null {
@@ -89,7 +109,7 @@ export function loadSave(): SaveData | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const save = parsed as Partial<SaveData>;
   if (!isNumberGrid(save.values) || !isBooleanGrid(save.fixed) || !isNotesGrid(save.notes)) {
-    localStorage.removeItem(SAVE_KEY);
+    safeRemoveItem(SAVE_KEY);
     return null;
   }
   return {
@@ -101,9 +121,9 @@ export function loadSave(): SaveData | null {
 }
 
 export function saveGame(data: SaveData) {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  safeSetItem(SAVE_KEY, JSON.stringify(data));
 }
 
 export function clearSave() {
-  localStorage.removeItem(SAVE_KEY);
+  safeRemoveItem(SAVE_KEY);
 }

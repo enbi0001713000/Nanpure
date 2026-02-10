@@ -29,11 +29,17 @@ const HINT_LIMIT_PER_BOARD = 3;
 const HINT_PENALTY_MS = 30_000;
 
 function getUsername() {
-  return localStorage.getItem(USERNAME_KEY) ?? '';
+  try {
+    return localStorage.getItem(USERNAME_KEY) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 function setUsername(name) {
-  localStorage.setItem(USERNAME_KEY, name);
+  try {
+    localStorage.setItem(USERNAME_KEY, name);
+  } catch {}
 }
 
 function normalizeName(name) {
