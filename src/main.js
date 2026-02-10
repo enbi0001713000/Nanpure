@@ -17,6 +17,8 @@ let appState = {
   settingsDraft: { username: '', settings: loadSettings() }
 };
 
+let layoutRaf = null;
+
 const app = document.querySelector('#app');
 if (!app) throw new Error('App root not found');
 
@@ -323,43 +325,77 @@ function renderPlay() {
 
   return `
   <section class="screen play ${game.cleared ? 'locked' : ''}">
-    <header class="play-header">
-      <button class="ghost" data-act="go-select">難易度</button>
-      <div class="meta">${formattedDifficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</div>
-      <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
-    </header>
-    <section class="controls top">
-      <button data-act="undo" ${game.cleared ? 'disabled' : ''}>Undo</button>
-      <button data-act="redo" ${game.cleared ? 'disabled' : ''}>Redo</button>
-      <button data-act="note" class="${game.noteMode ? 'active' : ''}" ${game.cleared ? 'disabled' : ''}>✏️メモ${game.noteMode ? 'ON' : 'OFF'}</button>
-    </section>
-    <section class="board" role="grid" aria-label="ナンプレ盤面">
-      ${game.cells
-        .map((row, r) =>
-          row
-            .map((cell, c) => {
-              const selected = game.selected?.r === r && game.selected?.c === c;
-              const peer = game.selected ? isPeer(game.selected, { r, c }) : false;
-              const same = game.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
-              const conflict = game.settings.mistakeHighlight && conflicts[r][c];
-              const classes = ['cell', selected && 'selected', peer && 'peer', same && 'same', conflict && 'conflict', cell.fixed && 'fixed']
-                .filter(Boolean)
-                .join(' ');
+    <div class="play-root">
+      <header class="play-header">
+        <button class="ghost" data-act="go-select">難易度</button>
+        <div class="meta">${formattedDifficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</div>
+        <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
+      </header>
+      <section class="controls top">
+        <button data-act="undo" ${game.cleared ? 'disabled' : ''}>Undo</button>
+        <button data-act="redo" ${game.cleared ? 'disabled' : ''}>Redo</button>
+        <button data-act="note" class="${game.noteMode ? 'active' : ''}" ${game.cleared ? 'disabled' : ''}>✏️メモ${game.noteMode ? 'ON' : 'OFF'}</button>
+      </section>
+      <div class="memo-indicator ${game.noteMode ? 'on' : ''}">${game.noteMode ? 'メモモードON ✏️' : 'メモモードOFF'}</div>
+      <section class="board-area">
+        <section class="board" role="grid" aria-label="ナンプレ盤面">
+          ${game.cells
+            .map((row, r) =>
+              row
+                .map((cell, c) => {
+                  const selected = game.selected?.r === r && game.selected?.c === c;
+                  const peer = game.selected ? isPeer(game.selected, { r, c }) : false;
+                  const same = game.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
+                  const conflict = game.settings.mistakeHighlight && conflicts[r][c];
+                  const classes = ['cell', selected && 'selected', peer && 'peer', same && 'same', conflict && 'conflict', cell.fixed && 'fixed']
+                    .filter(Boolean)
+                    .join(' ');
 
-              if (cell.value !== 0) return `<button data-cell="${r},${c}" role="gridcell" class="${classes}">${cell.value}</button>`;
-              const notes = Array.from({ length: 9 }, (_, i) => (cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>')).join('');
-              return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
-            })
-            .join('')
-        )
-        .join('')}
-    </section>
-    <section class="controls keypad">
-      ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}" ${game.cleared ? 'disabled' : ''}>${i + 1}</button>`).join('')}
-      <button data-num="0" ${game.cleared ? 'disabled' : ''}>消す</button>
-    </section>
-    <div class="memo-indicator ${game.noteMode ? 'on' : ''}">${game.noteMode ? 'メモモードON ✏️' : 'メモモードOFF'}</div>
+                  if (cell.value !== 0) return `<button data-cell="${r},${c}" role="gridcell" class="${classes}">${cell.value}</button>`;
+                  const notes = Array.from({ length: 9 }, (_, i) => (cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>')).join('');
+                  return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
+                })
+                .join('')
+            )
+            .join('')}
+        </section>
+      </section>
+      <section class="controls keypad">
+        ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}" ${game.cleared ? 'disabled' : ''}>${i + 1}</button>`).join('')}
+        <button data-num="0" ${game.cleared ? 'disabled' : ''}>消す</button>
+      </section>
+    </div>
   </section>`;
+}
+
+function syncPlayBoardSize() {
+  if (appState.screen !== 'play') return;
+  const boardArea = app.querySelector('.board-area');
+  const board = app.querySelector('.board');
+  if (!boardArea || !board) return;
+  const minimumMargin = 16;
+  const availableWidth = boardArea.clientWidth - minimumMargin;
+  const availableHeight = boardArea.clientHeight - minimumMargin;
+  const size = Math.floor(Math.min(availableWidth, availableHeight));
+  if (size > 0) {
+    board.style.width = `${size}px`;
+    board.style.height = `${size}px`;
+  }
+}
+
+function requestPlayLayoutSync() {
+  window.cancelAnimationFrame(layoutRaf);
+  layoutRaf = window.requestAnimationFrame(() => {
+    syncPlayBoardSize();
+  });
+}
+
+function setupViewportListeners() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  if (typeof viewport.addEventListener !== 'function') return;
+  viewport.addEventListener('resize', requestPlayLayoutSync);
+  viewport.addEventListener('scroll', requestPlayLayoutSync);
 }
 
 function renderUsernameModal() {
@@ -429,8 +465,10 @@ function render() {
   if (appState.modal === 'settings') modal = renderSettingsModal();
   if (appState.modal === 'result') modal = renderResultModal();
 
-  app.innerHTML = `<main>${content}${modal}${appState.toast ? `<div class="toast">${appState.toast}</div>` : ''}</main>`;
+  document.body.classList.toggle('play-mode', appState.screen === 'play');
+  app.innerHTML = `<main class="app-main ${appState.screen === 'play' ? 'play-main' : ''}">${content}${modal}${appState.toast ? `<div class="toast">${appState.toast}</div>` : ''}</main>`;
   wireEvents();
+  requestPlayLayoutSync();
 }
 
 function wireEvents() {
@@ -578,6 +616,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
+window.addEventListener('resize', requestPlayLayoutSync);
+window.addEventListener('orientationchange', requestPlayLayoutSync);
+setupViewportListeners();
 setInterval(() => {
   if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
   appState.game.elapsedMs += 1000;

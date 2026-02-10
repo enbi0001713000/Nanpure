@@ -1,17 +1,35 @@
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 
-export function loadSettings() {
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) {
-    return {
-      darkMode: false,
-      mistakeHighlight: true,
-      highlightSameNumber: true,
-      toggleToErase: true
-    };
+const DEFAULT_SETTINGS = {
+  darkMode: false,
+  mistakeHighlight: true,
+  highlightSameNumber: true,
+  toggleToErase: true
+};
+
+function readJson(key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(key);
+    return null;
   }
-  return JSON.parse(raw);
+}
+
+export function loadSettings() {
+  const parsed = readJson(SETTINGS_KEY);
+  if (!parsed || typeof parsed !== 'object') {
+    return { ...DEFAULT_SETTINGS };
+  }
+  return {
+    darkMode: !!parsed.darkMode,
+    mistakeHighlight: parsed.mistakeHighlight !== false,
+    highlightSameNumber: parsed.highlightSameNumber !== false,
+    toggleToErase: parsed.toggleToErase !== false
+  };
 }
 
 export function saveSettings(settings) {
@@ -19,9 +37,13 @@ export function saveSettings(settings) {
 }
 
 export function loadSave() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return null;
-  return JSON.parse(raw);
+  const parsed = readJson(SAVE_KEY);
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (!Array.isArray(parsed.values) || !Array.isArray(parsed.fixed) || !Array.isArray(parsed.notes)) {
+    localStorage.removeItem(SAVE_KEY);
+    return null;
+  }
+  return parsed;
 }
 
 export function saveGame(data) {
