@@ -69,7 +69,7 @@ export function loadSettings(): Settings {
   }
   const settings = parsed as Partial<Settings>;
   return {
-    darkMode: true,
+    darkMode: settings.darkMode !== false,
     mistakeHighlight: settings.mistakeHighlight !== false,
     highlightSameNumber: settings.highlightSameNumber !== false,
     toggleToErase: settings.toggleToErase !== false

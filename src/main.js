@@ -508,11 +508,12 @@ function renderSettingsModal() {
   return `
   <div class="modal-overlay">
     <div class="modal">
-      <div class="row between"><h3>設定</h3><button class="ghost" data-act="close-modal">×</button></div>
+      <div class="modal-header"><h3>設定</h3><button class="modal-close" data-act="close-modal" aria-label="設定を閉じる">×</button></div>
       <label>ユーザーネーム<input data-role="settings-username" maxlength="12" value="${draft.username}" /></label>
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${draft.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
+      <label class="setting-check"><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
+      <label class="setting-check"><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
+      <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${draft.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
+      <button class="theme-toggle-btn" data-act="toggle-darkmode">${draft.settings.darkMode ? '☀️ ライトモードに切替' : '🌙 ダークモードに切替'}</button>
       <button class="primary" data-act="save-settings">保存</button>
     </div>
   </div>`;
@@ -524,7 +525,7 @@ function renderResultModal() {
   return `
   <div class="modal-overlay">
     <div class="modal result">
-      <div class="row between"><h2>CLEAR!</h2><button class="ghost" data-act="close-result">×</button></div>
+      <div class="modal-header"><h2>CLEAR!</h2><button class="modal-close" data-act="close-result" aria-label="リザルトを閉じる">×</button></div>
       <div class="result-card">
         <div>ユーザー：${username}</div>
         <div>難易度：${formattedDifficultyLabel(game.difficulty)}</div>
@@ -541,7 +542,9 @@ function renderResultModal() {
 }
 
 function render() {
-  const settings = appState.game?.settings ?? loadSettings();
+  const settings = appState.modal === 'settings'
+    ? appState.settingsDraft.settings
+    : appState.game?.settings ?? loadSettings();
   document.body.classList.toggle('dark', settings.darkMode);
 
   let content = '';
@@ -636,6 +639,15 @@ function wireEvents() {
       appState.settingsDraft.settings[el.dataset.setting] = el.checked;
     };
   });
+
+
+  const toggleDarkModeBtn = app.querySelector('button[data-act="toggle-darkmode"]');
+  if (toggleDarkModeBtn) {
+    toggleDarkModeBtn.onclick = () => {
+      appState.settingsDraft.settings.darkMode = !appState.settingsDraft.settings.darkMode;
+      render();
+    };
+  }
 
   const saveSettingsBtn = app.querySelector('button[data-act="save-settings"]');
   if (saveSettingsBtn) saveSettingsBtn.onclick = saveSettingsModal;

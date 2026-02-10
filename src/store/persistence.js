@@ -25,7 +25,7 @@ export function loadSettings() {
     return { ...DEFAULT_SETTINGS };
   }
   return {
-    darkMode: true,
+    darkMode: parsed.darkMode !== false,
     mistakeHighlight: parsed.mistakeHighlight !== false,
     highlightSameNumber: parsed.highlightSameNumber !== false,
     toggleToErase: parsed.toggleToErase !== false
