@@ -18,6 +18,9 @@ let appState = {
 };
 
 let layoutRaf = null;
+let boardScale = 1;
+let pinchStartDistance = 0;
+let pinchStartScale = 1;
 
 const app = document.querySelector('#app');
 if (!app) throw new Error('App root not found');
@@ -143,6 +146,7 @@ function hasProgressGame() {
 
 function startNewGame(difficulty) {
   appState.game = createGame(difficulty);
+  boardScale = 1;
   appState.screen = 'play';
   appState.modal = null;
   render();
@@ -380,7 +384,48 @@ function syncPlayBoardSize() {
   if (size > 0) {
     board.style.width = `${size}px`;
     board.style.height = `${size}px`;
+    board.style.transformOrigin = 'center top';
+    board.style.transform = `scale(${boardScale})`;
   }
+}
+
+function getTouchDistance(touchA, touchB) {
+  const dx = touchA.clientX - touchB.clientX;
+  const dy = touchA.clientY - touchB.clientY;
+  return Math.hypot(dx, dy);
+}
+
+function clampBoardScale(value) {
+  return Math.min(3, Math.max(1, value));
+}
+
+function bindBoardPinchZoom(boardArea) {
+  if (boardArea.dataset.pinchZoomBound === '1') return;
+  boardArea.dataset.pinchZoomBound = '1';
+
+  boardArea.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 2) return;
+    pinchStartDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    pinchStartScale = boardScale;
+  });
+
+  boardArea.addEventListener(
+    'touchmove',
+    (event) => {
+      if (event.touches.length !== 2 || pinchStartDistance <= 0) return;
+      const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
+      const nextScale = clampBoardScale((pinchStartScale * currentDistance) / pinchStartDistance);
+      if (Math.abs(nextScale - boardScale) < 0.01) return;
+      boardScale = nextScale;
+      requestPlayLayoutSync();
+      event.preventDefault();
+    },
+    { passive: false }
+  );
+
+  boardArea.addEventListener('touchend', (event) => {
+    if (event.touches.length < 2) pinchStartDistance = 0;
+  });
 }
 
 function requestPlayLayoutSync() {
@@ -551,6 +596,9 @@ function wireEvents() {
   if (saveSettingsBtn) saveSettingsBtn.onclick = saveSettingsModal;
 
   if (appState.screen === 'play' && appState.game) {
+    const boardArea = app.querySelector('.board-area');
+    if (boardArea) bindBoardPinchZoom(boardArea);
+
     app.querySelectorAll('button[data-cell]').forEach((btn) => {
       btn.onclick = () => {
         const [r, c] = (btn.dataset.cell || '0,0').split(',').map(Number);
