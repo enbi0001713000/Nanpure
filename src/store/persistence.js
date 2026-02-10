@@ -43,7 +43,10 @@ export function loadSave() {
     localStorage.removeItem(SAVE_KEY);
     return null;
   }
-  return parsed;
+  return {
+    ...parsed,
+    hintUses: typeof parsed.hintUses === 'number' ? parsed.hintUses : 0
+  };
 }
 
 export function saveGame(data) {
