@@ -22,3 +22,10 @@ export type HistorySnapshot = {
   selected: Position | null;
   noteMode: boolean;
 };
+
+export type DifficultyStats = {
+  bestMs: number | null;
+  clearCount: number;
+};
+
+export type GameStats = Record<Difficulty, DifficultyStats>;

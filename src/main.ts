@@ -1,8 +1,8 @@
 import './styles.css';
 import { getRandomPuzzle } from './core/puzzleBank';
 import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku';
-import type { Cell, Difficulty, HistorySnapshot, Position, Settings } from './core/types';
-import { clearSave, loadSave, loadSettings, saveGame, saveSettings } from './store/persistence';
+import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types';
+import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence';
 
 type State = {
   difficulty: Difficulty;
@@ -17,6 +17,8 @@ type State = {
   timerRunning: boolean;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
+  stats: GameStats;
+  clearRecorded: boolean;
 };
 
 let state: State;
@@ -75,7 +77,9 @@ function newGame(difficulty: Difficulty) {
     hintUses: 0,
     timerRunning: true,
     history: [],
-    future: []
+    future: [],
+    stats: loadStats(),
+    clearRecorded: false
   };
   render();
 }
@@ -102,7 +106,9 @@ function restoreOrBoot() {
     hintUses: save.hintUses,
     timerRunning: true,
     history: save.history,
-    future: save.future
+    future: save.future,
+    stats: loadStats(),
+    clearRecorded: false
   };
   render();
 }
@@ -213,22 +219,31 @@ function formattedTime(ms: number) {
   return `${m}:${s}`;
 }
 
+function formattedBestTime(ms: number | null) {
+  return ms === null ? '--:--' : formattedTime(ms);
+}
+
 function render() {
   document.body.classList.toggle('dark', state.settings.darkMode);
   const values = state.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
   const selectedValue = state.selected ? values[state.selected.r][state.selected.c] : 0;
   const cleared = isCompleteAndValid(values);
+  const difficultyStats = state.stats[state.difficulty];
   if (cleared) {
     state.timerRunning = false;
-    clearSave();
+    if (!state.clearRecorded) {
+      state.clearRecorded = true;
+      clearSave();
+      state.stats = recordClearStats(state.difficulty, state.elapsedMs);
+    }
   }
 
   app.innerHTML = `
   <main>
     <header>
       <h1>Nanpure Web</h1>
-      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}</div>
+      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
     </header>
     <section class="controls top">
       <button data-new="easy">易</button>
@@ -280,7 +295,13 @@ function render() {
       <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
       <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
     </section>
-    ${cleared ? `<div class="clear">クリア！ ${formattedTime(state.elapsedMs)}</div>` : ''}
+    ${
+      cleared
+        ? `<div class="clear">クリア！ 今回タイム: ${formattedTime(state.elapsedMs)} / ベストタイム: ${formattedBestTime(
+            difficultyStats.bestMs
+          )} / 累計クリア: ${difficultyStats.clearCount}</div>`
+        : ''
+    }
   </main>`;
 
   wireEvents();
@@ -343,7 +364,10 @@ setInterval(() => {
   if (!state?.timerRunning) return;
   state.elapsedMs += 1000;
   const meta = app.querySelector('.meta');
-  if (meta) meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)}`;
+  if (meta) {
+    const difficultyStats = state.stats[state.difficulty];
+    meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
+  }
   scheduleSave();
 }, 1000);
 
