@@ -472,7 +472,6 @@ function renderSettingsModal() {
       <label>ユーザーネーム<input data-role="settings-username" maxlength="12" value="${draft.username}" /></label>
       <label><input data-setting="mistakeHighlight" type="checkbox" ${draft.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
       <label><input data-setting="highlightSameNumber" type="checkbox" ${draft.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="darkMode" type="checkbox" ${draft.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
       <label><input data-setting="toggleToErase" type="checkbox" ${draft.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
       <button class="primary" data-act="save-settings">保存</button>
     </div>
@@ -544,8 +543,9 @@ function wireEvents() {
     btn.onclick = () => requestStartDifficulty(btn.dataset.difficulty);
   });
 
-  const openSettingsBtn = app.querySelector('button[data-act="open-settings"]');
-  if (openSettingsBtn) openSettingsBtn.onclick = openSettings;
+  app.querySelectorAll('button[data-act="open-settings"]').forEach((btn) => {
+    btn.onclick = openSettings;
+  });
 
   const usernameInput = app.querySelector('input[data-role="username-input"]');
   if (usernameInput) {

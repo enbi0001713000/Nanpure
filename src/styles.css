@@ -111,6 +111,7 @@ body.play-mode .app-main.play-main {
   filter: blur(20px);
   opacity: 0.72;
   z-index: -2;
+  pointer-events: none;
 }
 
 .home-glow-left {
@@ -129,6 +130,7 @@ body.play-mode .app-main.play-main {
   position: absolute;
   width: min(36vw, 320px);
   aspect-ratio: 1;
+  pointer-events: none;
   border: 1px solid rgba(124, 236, 255, 0.55);
   background-image:
     linear-gradient(to right, rgba(107, 232, 255, 0.55) 1px, transparent 1px),
