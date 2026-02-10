@@ -39,14 +39,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
       cell.notes = new Set(s.notes);
     });
   });
-  state.selected = snapshot.selected;
-  state.noteMode = snapshot.noteMode;
-}
-
-function pushHistory() {
-  state.history.push(cloneSnapshot());
-  if (state.history.length > 200) state.history.shift();
-  state.future = [];
+@@ -49,94 +50,97 @@ function pushHistory() {
 }
 
 function createCells(values: number[][], initial: number[][]): Cell[][] {
@@ -144,21 +137,7 @@ function inputValue(value: number) {
 
   if (state.noteMode) {
     if (value === 0) {
-      cell.notes.clear();
-    } else if (cell.notes.has(value)) {
-      cell.notes.delete(value);
-    } else {
-      cell.notes.add(value);
-    }
-  } else {
-    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
-    cell.value = next;
-    cell.notes.clear();
-  }
-
-  render();
-  scheduleSave();
-}
+@@ -158,165 +162,243 @@ function inputValue(value: number) {
 
 function undo() {
   const prev = state.history.pop();
