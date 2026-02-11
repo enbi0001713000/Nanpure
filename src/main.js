@@ -12,6 +12,16 @@ const appEl = document.querySelector('#app');
 if (!appEl)
     throw new Error('App root not found');
 const app = appEl;
+const IS_DEV = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const TIMER_SAVE_INTERVAL_MS = 5000;
+const perfCounters = {
+    boardRenders: 0,
+    modalRenders: 0,
+    metaRenders: 0,
+    saveRequests: 0,
+    saveWrites: 0
+};
+let playLayoutMounted = false;
 function getUsername() {
     try {
         return localStorage.getItem(USERNAME_KEY) ?? '';
@@ -91,6 +101,8 @@ function newGame(difficulty) {
         clearRecorded: false,
         settingsOpen: false
     };
+    hasPendingSave = false;
+    elapsedUnsavedMs = 0;
     serialize();
     screen = 'play';
     render();
@@ -116,6 +128,8 @@ function restoreSave() {
         clearRecorded: false,
         settingsOpen: false
     };
+    hasPendingSave = false;
+    elapsedUnsavedMs = 0;
     serialize();
 }
 function serialize() {
@@ -140,9 +154,26 @@ function serialize() {
     });
 }
 let saveTimer;
-function scheduleSave() {
+let hasPendingSave = false;
+let elapsedUnsavedMs = 0;
+function flushSave(force = false) {
+    if (!state)
+        return;
+    if (!force && !hasPendingSave)
+        return;
+    hasPendingSave = false;
+    elapsedUnsavedMs = 0;
+    perfCounters.saveWrites += 1;
+    serialize();
+}
+function scheduleSave(delayMs = 250) {
     window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(serialize, 250);
+    saveTimer = window.setTimeout(() => flushSave(), delayMs);
+}
+function requestSave(delayMs = 250) {
+    hasPendingSave = true;
+    perfCounters.saveRequests += 1;
+    scheduleSave(delayMs);
 }
 function setSelected(pos) {
     if (!state)
@@ -176,7 +207,7 @@ function inputValue(value) {
         cell.notes.clear();
     }
     render();
-    scheduleSave();
+    requestSave();
 }
 function undo() {
     if (!state)
@@ -189,7 +220,7 @@ function undo() {
     state.future.push(cloneSnapshot());
     applySnapshot(prev);
     render();
-    scheduleSave();
+    requestSave();
 }
 function redo() {
     if (!state)
@@ -202,7 +233,7 @@ function redo() {
     state.history.push(cloneSnapshot());
     applySnapshot(next);
     render();
-    scheduleSave();
+    requestSave();
 }
 function toggleSetting(key) {
     if (!state)
@@ -233,7 +264,7 @@ function useHint() {
     cell.value = answer;
     cell.notes.clear();
     render();
-    scheduleSave();
+    requestSave();
 }
 function formattedTime(ms) {
     const totalSec = Math.floor(ms / 1000);
@@ -408,44 +439,53 @@ function renderSelect() {
         };
     }
 }
-function renderPlay() {
-    if (!state)
+function ensurePlayLayout() {
+    if (playLayoutMounted)
         return;
-    const game = state;
-    document.body.classList.toggle('dark', game.settings.darkMode);
-    const values = game.cells.map((r) => r.map((c) => c.value));
-    const conflicts = getConflicts(values);
-    const selectedValue = game.selected ? values[game.selected.r][game.selected.c] : 0;
-    const cleared = isCompleteAndValid(values);
-    if (cleared) {
-        game.timerRunning = false;
-        if (!game.clearRecorded) {
-            game.clearRecorded = true;
-            clearSave();
-            game.stats = recordClearStats(game.difficulty, game.elapsedMs);
-        }
-    }
-    const difficultyStats = game.stats[game.difficulty];
     app.innerHTML = `
   <main class="app-main play-main">
     <section class="screen play">
       <div class="play-root">
         <header class="play-header">
           <button data-act="go-select">難易度</button>
-          <div class="meta">${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / AVG ${formattedRecentAverage(difficultyStats.recentAvgMs)} / CLR ${difficultyStats.clearCount}</div>
-          <button data-act="settings" class="icon-button settings-button" aria-expanded="${game.settingsOpen}" aria-label="設定を開く">⚙️</button>
+          <div class="meta"></div>
+          <button data-act="settings" class="icon-button settings-button" aria-expanded="false" aria-label="設定を開く">⚙️</button>
         </header>
+        ${IS_DEV ? '<div class="dev-counters" aria-live="polite"></div>' : ''}
         <section class="controls top">
           <button data-act="undo">Undo</button>
           <button data-act="redo">Redo</button>
-          <button data-act="note" class="${game.noteMode ? 'active' : ''}">メモ</button>
+          <button data-act="note">メモ</button>
           <button data-act="hint">ヒント</button>
         </section>
-        <div class="memo-indicator ${game.noteMode ? 'on' : ''}">メモモード: ${game.noteMode ? 'ON' : 'OFF'}</div>
-        <section class="play-stats">戦績: CLR ${difficultyStats.clearCount} / BEST ${formattedBestTime(difficultyStats.bestMs)} / 直近平均 ${formattedRecentAverage(difficultyStats.recentAvgMs)}</section>
+        <div class="memo-indicator">メモモード: OFF</div>
+        <section class="play-stats"></section>
         <div class="board-area">
-          <section class="board" role="grid" aria-label="ナンプレ盤面">
-            ${game.cells
+          <section class="board" role="grid" aria-label="ナンプレ盤面"></section>
+        </div>
+        <section class="controls keypad">
+          ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
+          <button data-num="0">消す</button>
+        </section>
+      </div>
+    </section>
+    <div class="play-modal-layer"></div>
+  </main>`;
+    playLayoutMounted = true;
+}
+function renderDevCounters() {
+    if (!IS_DEV)
+        return;
+    const dev = app.querySelector('.dev-counters');
+    if (!dev)
+        return;
+    dev.textContent = `DEV board:${perfCounters.boardRenders} meta:${perfCounters.metaRenders} modal:${perfCounters.modalRenders} saveReq:${perfCounters.saveRequests} saveWrite:${perfCounters.saveWrites}`;
+}
+function buildBoardMarkup(game) {
+    const values = game.cells.map((r) => r.map((c) => c.value));
+    const conflicts = getConflicts(values);
+    const selectedValue = game.selected ? values[game.selected.r][game.selected.c] : 0;
+    return game.cells
         .map((row, r) => row
         .map((cell, c) => {
         const selected = game.selected?.r === r && game.selected?.c === c;
@@ -456,21 +496,50 @@ function renderPlay() {
         if (cell.value !== 0) {
             return `<button data-cell="${r},${c}" role="gridcell" class="${classes}">${cell.value}</button>`;
         }
-        const notes = Array.from({ length: 9 }, (_, i) => cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>').join('');
+        const notes = Array.from({ length: 9 }, (_, i) => (cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>')).join('');
         return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
     })
         .join(''))
-        .join('')}
-          </section>
-        </div>
-        <section class="controls keypad">
-          ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
-          <button data-num="0">消す</button>
-        </section>
-      </div>
-    </section>
-
-    ${game.settingsOpen
+        .join('');
+}
+function renderPlayMeta(game) {
+    const meta = app.querySelector('.meta');
+    const stats = game.stats[game.difficulty];
+    if (meta) {
+        meta.textContent = `${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(stats.bestMs)} / AVG ${formattedRecentAverage(stats.recentAvgMs)} / CLR ${stats.clearCount}`;
+    }
+    const settingsBtn = app.querySelector('button[data-act="settings"]');
+    if (settingsBtn)
+        settingsBtn.setAttribute('aria-expanded', String(game.settingsOpen));
+    perfCounters.metaRenders += 1;
+    renderDevCounters();
+}
+function renderPlayBoard(game) {
+    const board = app.querySelector('.board');
+    if (!board)
+        return;
+    board.innerHTML = buildBoardMarkup(game);
+    const noteBtn = app.querySelector('button[data-act="note"]');
+    if (noteBtn)
+        noteBtn.classList.toggle('active', game.noteMode);
+    const memo = app.querySelector('.memo-indicator');
+    if (memo) {
+        memo.classList.toggle('on', game.noteMode);
+        memo.textContent = `メモモード: ${game.noteMode ? 'ON' : 'OFF'}`;
+    }
+    const stats = game.stats[game.difficulty];
+    const statsEl = app.querySelector('.play-stats');
+    if (statsEl) {
+        statsEl.textContent = `戦績: CLR ${stats.clearCount} / BEST ${formattedBestTime(stats.bestMs)} / 直近平均 ${formattedRecentAverage(stats.recentAvgMs)}`;
+    }
+    perfCounters.boardRenders += 1;
+    renderDevCounters();
+}
+function renderPlayModal(game, cleared) {
+    const layer = app.querySelector('.play-modal-layer');
+    if (!layer)
+        return;
+    layer.innerHTML = `${game.settingsOpen
         ? `<div class="modal-overlay"><section class="modal"><header class="modal-header"><h2>設定</h2><button class="modal-close" data-act="settings-close">×</button></header>
       <label class="setting-check"><input data-setting="darkMode" type="checkbox" ${game.settings.darkMode ? 'checked' : ''}/> ダークモード</label>
       <label class="setting-check"><input data-setting="mistakeHighlight" type="checkbox" ${game.settings.mistakeHighlight ? 'checked' : ''}/> ミス表示</label>
@@ -478,9 +547,29 @@ function renderPlay() {
       <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${game.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
       </section></div>`
         : ''}
-
-    ${cleared ? renderResultModal(game) : ''}
-  </main>`;
+  ${cleared ? renderResultModal(game) : ''}`;
+    perfCounters.modalRenders += 1;
+    renderDevCounters();
+}
+function renderPlay() {
+    if (!state)
+        return;
+    const game = state;
+    document.body.classList.toggle('dark', game.settings.darkMode);
+    const values = game.cells.map((r) => r.map((c) => c.value));
+    const cleared = isCompleteAndValid(values);
+    if (cleared) {
+        game.timerRunning = false;
+        if (!game.clearRecorded) {
+            game.clearRecorded = true;
+            clearSave();
+            game.stats = recordClearStats(game.difficulty, game.elapsedMs);
+        }
+    }
+    ensurePlayLayout();
+    renderPlayMeta(game);
+    renderPlayBoard(game);
+    renderPlayModal(game, cleared);
     wirePlayEvents();
 }
 function wirePlayEvents() {
@@ -511,7 +600,7 @@ function wirePlayEvents() {
             if (!state)
                 return;
             state.noteMode = !state.noteMode;
-            render();
+            renderPlayBoard(state);
         };
     }
     const hintBtn = byAct('hint');
@@ -529,6 +618,7 @@ function wirePlayEvents() {
             screen = 'select';
             if (state)
                 state.settingsOpen = false;
+            playLayoutMounted = false;
             render();
         };
     }
@@ -551,6 +641,7 @@ function wirePlayEvents() {
         titleBtn.onclick = () => {
             state = null;
             screen = 'home';
+            playLayoutMounted = false;
             render();
         };
     }
@@ -558,10 +649,12 @@ function wirePlayEvents() {
 function render() {
     document.body.classList.toggle('play-mode', screen === 'play');
     if (screen === 'home') {
+        playLayoutMounted = false;
         renderHome();
         return;
     }
     if (screen === 'select') {
+        playLayoutMounted = false;
         renderSelect();
         return;
     }
@@ -597,17 +690,19 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' || e.key === 'Delete')
         return inputValue(0);
 });
-window.addEventListener('beforeunload', serialize);
+window.addEventListener('beforeunload', () => flushSave(true));
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden')
+        flushSave(true);
+});
 setInterval(() => {
     if (screen !== 'play' || !state || !state.timerRunning)
         return;
     state.elapsedMs += 1000;
-    const meta = app.querySelector('.meta');
-    if (meta) {
-        const difficultyStats = state.stats[state.difficulty];
-        meta.textContent = `${difficultyLabel(state.difficulty)} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / AVG ${formattedRecentAverage(difficultyStats.recentAvgMs)} / CLR ${difficultyStats.clearCount}`;
-    }
-    scheduleSave();
+    renderPlayMeta(state);
+    elapsedUnsavedMs += 1000;
+    if (elapsedUnsavedMs >= TIMER_SAVE_INTERVAL_MS)
+        requestSave(0);
 }, 1000);
 restoreSave();
 render();
