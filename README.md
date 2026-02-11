@@ -1,6 +1,12 @@
 # Nanpure Web
 
-ブラウザだけで動く、ビルド不要のナンプレ（数独）アプリです。GitHub Pages にそのまま置けます。
+ブラウザで動くナンプレ（数独）アプリです。
+
+## 開発フロー（運用ルール）
+
+- **編集対象は TypeScript（`src/**/*.ts`）のみ**。
+- **JavaScript（`src/**/*.js`）は生成物**として扱い、`npm run build` で更新します。
+- 実行前に `npm run build` を通して、TS→JS 変換後の成果物で確認してください。
 
 ## 起動（ローカル）
 
@@ -9,41 +15,25 @@ npm run dev
 # http://localhost:5173 を開く
 ```
 
-## テスト
+`dev` は `build` を先に実行してから静的サーバーを起動します。
+
+## テスト・チェック
 
 ```bash
+npm run typecheck
 npm run test
 ```
 
-## 画面状態（1ページ内状態切替）
-
-- `HOME`：タイトル（2行）と「挑戦する」
-- `SELECT`：難易度選択
-- `PLAY`：盤面操作
-- `MODAL_USERNAME`：初回開始時の名前登録
-- `MODAL_SETTINGS`：設定（ユーザーネーム変更、表示設定）
-- `MODAL_RESULT`：クリア時のリザルト
-
-### 遷移概要
-
-`HOME → SELECT → (名前未登録なら MODAL_USERNAME) → PLAY → MODAL_RESULT`
-
-- `MODAL_RESULT` から「もう一度」で同難易度を再開
-- `MODAL_RESULT` から「ホームへ」で `HOME` へ戻る
-- URLパスは固定（方式A）
+- `typecheck`: TS の型検査のみ実行（JSは更新しない）
+- `test`: `build` 実行後に Node テストを実行
 
 ## 主な機能
 
-- 固定リンク共有（X Intent）とリンクコピー
-- ハッシュタグ固定：`#えびナンプレ`
-- クリア後の編集ロック（入力/メモ/Undo/Redo無効）
-- メモモードの視認性強化（ボタン状態とインジケーター）
-- 難易度再選択時の破棄確認
+- 難易度切り替え（easy/medium/hard/oni）
+- メモ入力、Undo/Redo、同数字再入力で消去
+- 罰ヒント（1盤面3回まで、30秒加算）
+- ミス表示、同一数字ハイライト、ダークモード
 - localStorage 保存
-  - `np_username_v1`
   - `np_settings_v1`
   - `np_save_v1`
-
-## デプロイ（GitHub Pages）
-
-このリポジトリのファイルをそのまま GitHub Pages に公開可能です（ビルド工程不要）。
+  - `np_stats_v1`

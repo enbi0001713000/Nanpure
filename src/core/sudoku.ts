@@ -1,4 +1,4 @@
-import type { Position } from './types';
+import type { Position } from './types.js';
 
 export function toGrid(serialized: string): number[][] {
   const values = serialized.split('').map((v) => Number(v));

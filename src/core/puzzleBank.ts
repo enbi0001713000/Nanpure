@@ -1,4 +1,4 @@
-import type { Difficulty } from './types';
+import type { Difficulty } from './types.js';
 
 export type Puzzle = {
   puzzle: string;
