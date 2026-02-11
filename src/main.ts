@@ -1,4 +1,4 @@
-import { getRandomPuzzle } from './core/puzzleBank.js';
+import { getRandomPuzzle, pushRecentPuzzleId } from './core/puzzleBank.js';
 import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku.js';
 import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types.js';
 import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence.js';
@@ -29,6 +29,7 @@ let screen: Screen = 'home';
 let state: State | null = null;
 let usernameModalOpen = false;
 let usernameDraft = '';
+let recentPuzzleIds: Record<Difficulty, string[]> = { easy: [], medium: [], hard: [], oni: [] };
 
 const appEl = document.querySelector<HTMLDivElement>('#app');
 if (!appEl) throw new Error('App root not found');
@@ -97,7 +98,8 @@ function createCells(values: number[][], initial: number[][]): Cell[][] {
 }
 
 function newGame(difficulty: Difficulty) {
-  const p = getRandomPuzzle(difficulty);
+  const p = getRandomPuzzle(difficulty, recentPuzzleIds[difficulty]);
+  recentPuzzleIds[difficulty] = pushRecentPuzzleId(recentPuzzleIds[difficulty], p.id);
   const initial = toGrid(p.puzzle);
   const solution = toGrid(p.solution);
   state = {
@@ -116,6 +118,7 @@ function newGame(difficulty: Difficulty) {
     clearRecorded: false,
     settingsOpen: false
   };
+  serialize();
   screen = 'play';
   render();
 }
@@ -123,6 +126,7 @@ function newGame(difficulty: Difficulty) {
 function restoreSave() {
   const save = loadSave();
   if (!save) return;
+  recentPuzzleIds = save.recentPuzzleIds;
   state = {
     difficulty: save.difficulty,
     initial: save.initial,
@@ -141,6 +145,7 @@ function restoreSave() {
     clearRecorded: false,
     settingsOpen: false
   };
+  serialize();
 }
 
 function serialize() {
@@ -158,7 +163,8 @@ function serialize() {
     elapsedMs: state.elapsedMs,
     hintUses: 0,
     history: state.history,
-    future: state.future
+    future: state.future,
+    recentPuzzleIds
   });
 }
 

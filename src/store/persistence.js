@@ -47,6 +47,20 @@ function isNotesGrid(notes) {
 function isDifficulty(value) {
     return value === 'easy' || value === 'medium' || value === 'hard' || value === 'oni';
 }
+function sanitizeRecentPuzzleIds(source) {
+    const read = (difficulty) => {
+        if (!source || typeof source !== 'object')
+            return [];
+        const value = source[difficulty];
+        return Array.isArray(value) ? value.filter((id) => typeof id === 'string').slice(-20) : [];
+    };
+    return {
+        easy: read('easy'),
+        medium: read('medium'),
+        hard: read('hard'),
+        oni: read('oni')
+    };
+}
 const DEFAULT_SETTINGS = {
     darkMode: true,
     mistakeHighlight: true,
@@ -95,7 +109,8 @@ export function loadSave() {
         difficulty: save.difficulty,
         history: Array.isArray(save.history) ? save.history : [],
         future: Array.isArray(save.future) ? save.future : [],
-        hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0
+        hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0,
+        recentPuzzleIds: sanitizeRecentPuzzleIds(save.recentPuzzleIds)
     };
 }
 export function saveGame(data) {

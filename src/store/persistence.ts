@@ -13,6 +13,7 @@ export type SaveData = {
   hintUses: number;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
+  recentPuzzleIds: Record<Difficulty, string[]>;
 };
 
 const SETTINGS_KEY = 'np_settings_v1';
@@ -79,6 +80,20 @@ function isDifficulty(value: unknown): value is Difficulty {
   return value === 'easy' || value === 'medium' || value === 'hard' || value === 'oni';
 }
 
+function sanitizeRecentPuzzleIds(source: unknown): Record<Difficulty, string[]> {
+  const read = (difficulty: Difficulty): string[] => {
+    if (!source || typeof source !== 'object') return [];
+    const value = (source as Partial<Record<Difficulty, unknown>>)[difficulty];
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string').slice(-20) : [];
+  };
+  return {
+    easy: read('easy'),
+    medium: read('medium'),
+    hard: read('hard'),
+    oni: read('oni')
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
   mistakeHighlight: true,
@@ -128,7 +143,8 @@ export function loadSave(): SaveData | null {
     difficulty: save.difficulty,
     history: Array.isArray(save.history) ? save.history : [],
     future: Array.isArray(save.future) ? save.future : [],
-    hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0
+    hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0,
+    recentPuzzleIds: sanitizeRecentPuzzleIds(save.recentPuzzleIds)
   };
 }
 
