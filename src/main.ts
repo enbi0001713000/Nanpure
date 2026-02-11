@@ -111,6 +111,15 @@ function rebuildAutoNotes() {
   }
 }
 
+function clearAllNotes() {
+  if (!state) return;
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      state.cells[r][c].notes.clear();
+    }
+  }
+}
+
 function createCells(values: number[][], initial: number[][]): Cell[][] {
   return values.map((row, r) =>
     row.map((value, c) => ({
@@ -297,6 +306,8 @@ function toggleSetting(key: keyof Settings) {
     if (state.settings.autoNotes) {
       state.noteMode = false;
       rebuildAutoNotes();
+    } else {
+      clearAllNotes();
     }
     renderPlayBoard(state);
   }
