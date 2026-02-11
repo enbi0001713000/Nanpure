@@ -569,10 +569,6 @@ function renderResultModal() {
   </div>`;
 }
 
-function render() {
-  const settings = appState.modal === 'settings'
-    ? appState.settingsDraft.settings
-    : appState.game?.settings ?? loadSettings();
 let fatalRendering = false;
 
 function showFatalScreen(error) {
