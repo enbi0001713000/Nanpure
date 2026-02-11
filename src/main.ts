@@ -1,8 +1,7 @@
-import './styles.css';
-import { getRandomPuzzle } from './core/puzzleBank';
-import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku';
-import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types';
-import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence';
+import { getRandomPuzzle } from './core/puzzleBank.js';
+import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku.js';
+import type { Cell, Difficulty, GameStats, HistorySnapshot, Position, Settings } from './core/types.js';
+import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence.js';
 
 type State = {
   difficulty: Difficulty;
@@ -23,8 +22,9 @@ type State = {
 };
 
 let state: State;
-const app = document.querySelector<HTMLDivElement>('#app');
-if (!app) throw new Error('App root not found');
+const appEl = document.querySelector<HTMLDivElement>('#app');
+if (!appEl) throw new Error('App root not found');
+const app = appEl;
 
 function cloneSnapshot(): HistorySnapshot {
   return {
@@ -45,7 +45,16 @@ function applySnapshot(snapshot: HistorySnapshot) {
   state.selected = snapshot.selected;
   state.noteMode = snapshot.noteMode;
 }
-@@ -57,80 +58,82 @@ function createCells(values: number[][], initial: number[][]): Cell[][] {
+
+function pushHistory() {
+  state.history.push(cloneSnapshot());
+  if (state.history.length > 200) state.history.shift();
+  state.future = [];
+}
+
+function createCells(values: number[][], initial: number[][]): Cell[][] {
+  return values.map((row, r) =>
+    row.map((value, c) => ({
       value,
       fixed: initial[r][c] !== 0,
       notes: new Set<number>()
@@ -108,6 +117,7 @@ function restoreOrBoot() {
 }
 
 function serialize() {
+  if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   saveGame({
     difficulty: state.difficulty,
     initial: state.initial,
@@ -128,9 +138,37 @@ let saveTimer: number | undefined;
 function scheduleSave() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(serialize, 250);
-@@ -168,50 +171,55 @@ function inputValue(value: number) {
+}
+
+function setSelected(pos: Position) {
+  state.selected = pos;
+  render();
+}
+
+function inputValue(value: number) {
+  const pos = state.selected;
+  if (!pos) return;
+  if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
+  const cell = state.cells[pos.r][pos.c];
+  if (cell.fixed) return;
+
+  pushHistory();
+  if (state.noteMode) {
+    if (value === 0) cell.notes.clear();
+    else if (cell.notes.has(value)) cell.notes.delete(value);
+    else cell.notes.add(value);
+  } else {
+    const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
+    cell.value = next;
+    cell.notes.clear();
+  }
+
+  render();
+  scheduleSave();
+}
 
 function undo() {
+  if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   const prev = state.history.pop();
   if (!prev) return;
   state.future.push(cloneSnapshot());
@@ -140,6 +178,7 @@ function undo() {
 }
 
 function redo() {
+  if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   const next = state.future.pop();
   if (!next) return;
   state.history.push(cloneSnapshot());
@@ -184,7 +223,10 @@ function useHint() {
 function formattedTime(ms: number) {
   const totalSec = Math.floor(ms / 1000);
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-@@ -222,141 +230,146 @@ function formattedTime(ms: number) {
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 function formattedBestTime(ms: number | null) {
   return ms === null ? '--:--' : formattedTime(ms);
 }
@@ -298,14 +340,21 @@ function wireEvents() {
   });
 
   const byAct = (act: string) => app.querySelector<HTMLButtonElement>(`button[data-act="${act}"]`);
-  byAct('undo')!.onclick = undo;
-  byAct('redo')!.onclick = redo;
-  byAct('note')!.onclick = () => {
-    state.noteMode = !state.noteMode;
-    render();
-  };
-  byAct('hint')!.onclick = useHint;
-  byAct('settings')!.onclick = toggleSettingsPanel;
+  const undoBtn = byAct('undo');
+  if (undoBtn) undoBtn.onclick = undo;
+  const redoBtn = byAct('redo');
+  if (redoBtn) redoBtn.onclick = redo;
+  const noteBtn = byAct('note');
+  if (noteBtn) {
+    noteBtn.onclick = () => {
+      state.noteMode = !state.noteMode;
+      render();
+    };
+  }
+  const hintBtn = byAct('hint');
+  if (hintBtn) hintBtn.onclick = useHint;
+  const settingsBtn = byAct('settings');
+  if (settingsBtn) settingsBtn.onclick = toggleSettingsPanel;
 }
 
 document.addEventListener('keydown', (e) => {
@@ -331,3 +380,16 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('beforeunload', serialize);
+
+setInterval(() => {
+  if (!state.timerRunning) return;
+  state.elapsedMs += 1000;
+  const meta = app.querySelector<HTMLDivElement>('.meta');
+  if (meta) {
+    const difficultyStats = state.stats[state.difficulty];
+    meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
+  }
+  scheduleSave();
+}, 1000);
+
+restoreOrBoot();
