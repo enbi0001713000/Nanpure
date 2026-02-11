@@ -122,6 +122,10 @@ button.active {
   background: transparent;
 }
 
+body:not(.dark) .play-header button[data-act="go-select"] {
+  background: var(--btn-bg);
+}
+
 .row {
   display: flex;
   gap: 12px;
