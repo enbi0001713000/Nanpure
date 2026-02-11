@@ -1,11 +1,43 @@
 import type { Difficulty } from './types.js';
 
 export type Puzzle = {
+  id: string;
   puzzle: string;
   solution: string;
 };
 
-const bank: Record<Difficulty, Puzzle[]> = {
+type PuzzleSeed = {
+  puzzle: string;
+  solution: string;
+};
+
+type Variant = {
+  bandShift: number;
+  rowShift: number;
+  stackShift: number;
+  colShift: number;
+  digitShift: number;
+  transpose: boolean;
+};
+
+export const RECENT_PUZZLE_QUEUE_SIZE = 6;
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  easy: 'EASY',
+  medium: 'NORMAL',
+  hard: 'HARD',
+  oni: 'ONI'
+};
+
+const variants: Variant[] = [
+  { bandShift: 0, rowShift: 0, stackShift: 0, colShift: 0, digitShift: 0, transpose: false },
+  { bandShift: 1, rowShift: 1, stackShift: 2, colShift: 2, digitShift: 2, transpose: false },
+  { bandShift: 2, rowShift: 2, stackShift: 1, colShift: 1, digitShift: 4, transpose: true },
+  { bandShift: 1, rowShift: 0, stackShift: 1, colShift: 2, digitShift: 6, transpose: true },
+  { bandShift: 2, rowShift: 1, stackShift: 0, colShift: 1, digitShift: 8, transpose: false }
+];
+
+const seedBank: Record<Difficulty, PuzzleSeed[]> = {
   easy: [
     {
       puzzle: '530070000600195000098000060800060003400803001700020006060000280000419005000080079',
@@ -80,7 +112,71 @@ const bank: Record<Difficulty, Puzzle[]> = {
   ]
 };
 
-export function getRandomPuzzle(difficulty: Difficulty): Puzzle {
+function buildOrder(groupShift: number, innerShift: number): number[] {
+  return Array.from({ length: 9 }, (_, idx) => ((Math.floor(idx / 3) + groupShift) % 3) * 3 + ((idx % 3) + innerShift) % 3);
+}
+
+function remapDigit(ch: string, digitShift: number): string {
+  if (ch === '0') return ch;
+  const digit = Number(ch);
+  return String(((digit + digitShift - 1) % 9) + 1);
+}
+
+function transformGrid(grid: string, variant: Variant): string {
+  const rowOrder = buildOrder(variant.bandShift, variant.rowShift);
+  const colOrder = buildOrder(variant.stackShift, variant.colShift);
+  const out: string[] = [];
+
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const sourceR = rowOrder[variant.transpose ? c : r];
+      const sourceC = colOrder[variant.transpose ? r : c];
+      const ch = grid[sourceR * 9 + sourceC];
+      out.push(remapDigit(ch, variant.digitShift));
+    }
+  }
+
+  return out.join('');
+}
+
+function expandSeeds(difficulty: Difficulty, seeds: PuzzleSeed[]): Puzzle[] {
+  const expanded = seeds.flatMap((seed, seedIndex) =>
+    variants.map((variant, variantIndex) => ({
+      id: `${difficulty}-${seedIndex + 1}-${variantIndex + 1}`,
+      puzzle: transformGrid(seed.puzzle, variant),
+      solution: transformGrid(seed.solution, variant)
+    }))
+  );
+
+  return expanded;
+}
+
+const bank: Record<Difficulty, Puzzle[]> = {
+  easy: expandSeeds('easy', seedBank.easy),
+  medium: expandSeeds('medium', seedBank.medium),
+  hard: expandSeeds('hard', seedBank.hard),
+  oni: expandSeeds('oni', seedBank.oni)
+};
+
+export function getRandomPuzzle(difficulty: Difficulty, recentPuzzleIds: string[] = []): Puzzle {
   const list = bank[difficulty];
-  return list[Math.floor(Math.random() * list.length)];
+  const recent = new Set(recentPuzzleIds);
+  const candidateList = list.filter((puzzle) => !recent.has(puzzle.id));
+  const source = candidateList.length > 0 ? candidateList : list;
+  const selected = source[Math.floor(Math.random() * source.length)];
+
+  console.info(
+    `[puzzle/select] difficulty=${DIFFICULTY_LABEL[difficulty]} id=${selected.id} candidates=${source.length}/${list.length}`
+  );
+
+  return selected;
+}
+
+export function pushRecentPuzzleId(recentPuzzleIds: string[], puzzleId: string): string[] {
+  const next = recentPuzzleIds.filter((id) => id !== puzzleId);
+  next.push(puzzleId);
+  if (next.length > RECENT_PUZZLE_QUEUE_SIZE) {
+    next.splice(0, next.length - RECENT_PUZZLE_QUEUE_SIZE);
+  }
+  return next;
 }
