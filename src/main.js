@@ -1,5 +1,5 @@
 import { getRandomPuzzle, pushRecentPuzzleId } from './core/puzzleBank.js';
-import { getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku.js';
+import { getCandidates, getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku.js';
 import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence.js';
 const USERNAME_KEY = 'np_username_v1';
 const HASH_TAG = '#えびナンプレ';
@@ -73,6 +73,26 @@ function pushHistory() {
         state.history.shift();
     state.future = [];
 }
+function rebuildAutoNotes() {
+    if (!state || !state.settings.autoNotes)
+        return;
+    const values = state.cells.map((row) => row.map((cell) => cell.value));
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            const cell = state.cells[r][c];
+            cell.notes = new Set(getCandidates(values, r, c));
+        }
+    }
+}
+function clearAllNotes() {
+    if (!state)
+        return;
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            state.cells[r][c].notes.clear();
+        }
+    }
+}
 function createCells(values, initial) {
     return values.map((row, r) => row.map((value, c) => ({
         value,
@@ -104,6 +124,7 @@ function newGame(difficulty) {
     };
     hasPendingSave = false;
     elapsedUnsavedMs = 0;
+    rebuildAutoNotes();
     serialize();
     screen = 'play';
     render();
@@ -132,6 +153,10 @@ function restoreSave() {
     };
     hasPendingSave = false;
     elapsedUnsavedMs = 0;
+    if (state.settings.autoNotes) {
+        state.noteMode = false;
+        rebuildAutoNotes();
+    }
     serialize();
 }
 function serialize() {
@@ -195,8 +220,9 @@ function inputValue(value) {
     const cell = state.cells[pos.r][pos.c];
     if (cell.fixed)
         return;
+    const manualNoteMode = state.noteMode && !state.settings.autoNotes;
     pushHistory();
-    if (state.noteMode) {
+    if (manualNoteMode) {
         if (value === 0)
             cell.notes.clear();
         else if (cell.notes.has(value))
@@ -214,6 +240,7 @@ function inputValue(value) {
         cell.value = next;
         cell.notes.clear();
     }
+    rebuildAutoNotes();
     render();
     requestSave();
 }
@@ -227,6 +254,9 @@ function undo() {
         return;
     state.future.push(cloneSnapshot());
     applySnapshot(prev);
+    if (state.settings.autoNotes)
+        state.noteMode = false;
+    rebuildAutoNotes();
     render();
     requestSave();
 }
@@ -240,6 +270,9 @@ function redo() {
         return;
     state.history.push(cloneSnapshot());
     applySnapshot(next);
+    if (state.settings.autoNotes)
+        state.noteMode = false;
+    rebuildAutoNotes();
     render();
     requestSave();
 }
@@ -247,7 +280,18 @@ function toggleSetting(key) {
     if (!state)
         return;
     state.settings[key] = !state.settings[key];
+    if (key === 'autoNotes') {
+        if (state.settings.autoNotes) {
+            state.noteMode = false;
+            rebuildAutoNotes();
+        }
+        else {
+            clearAllNotes();
+        }
+        renderPlayBoard(state);
+    }
     saveSettings(state.settings);
+    requestSave();
     render();
 }
 function toggleSettingsPanel() {
@@ -271,6 +315,7 @@ function useHint() {
     pushHistory();
     cell.value = answer;
     cell.notes.clear();
+    rebuildAutoNotes();
     render();
     requestSave();
 }
@@ -529,12 +574,17 @@ function renderPlayBoard(game) {
         return;
     board.innerHTML = buildBoardMarkup(game);
     const noteBtn = app.querySelector('button[data-act="note"]');
-    if (noteBtn)
+    if (noteBtn) {
         noteBtn.classList.toggle('active', game.noteMode);
+        noteBtn.disabled = game.settings.autoNotes;
+        noteBtn.title = game.settings.autoNotes ? '自動候補メモON中は手動メモを変更できません' : '';
+    }
     const memo = app.querySelector('.memo-indicator');
     if (memo) {
-        memo.classList.toggle('on', game.noteMode);
-        memo.textContent = `メモモード: ${game.noteMode ? 'ON' : 'OFF'}`;
+        memo.classList.toggle('on', game.noteMode || game.settings.autoNotes);
+        memo.textContent = game.settings.autoNotes
+            ? '自動候補メモ: ON（手動メモ編集は無効）'
+            : `メモモード: ${game.noteMode ? 'ON' : 'OFF'}`;
     }
     const stats = game.stats[game.difficulty];
     const statsEl = app.querySelector('.play-stats');
@@ -555,6 +605,8 @@ function renderPlayModal(game, cleared) {
       <p class="setting-note">※ ミス表示がOFFでも、ミス回数の内部カウントは継続されます。</p>
       <label class="setting-check"><input data-setting="highlightSameNumber" type="checkbox" ${game.settings.highlightSameNumber ? 'checked' : ''}/> 同一数字ハイライト</label>
       <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${game.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
+      <label class="setting-check"><input data-setting="autoNotes" type="checkbox" ${game.settings.autoNotes ? 'checked' : ''}/> 自動候補メモ</label>
+      <p class="setting-note">※ ON中は空マスの候補を自動更新し、手動メモ編集は無効になります。</p>
       </section></div>`
         : ''}
   ${cleared ? renderResultModal(game) : ''}`;
@@ -607,7 +659,7 @@ function wirePlayEvents() {
     const noteBtn = byAct('note');
     if (noteBtn) {
         noteBtn.onclick = () => {
-            if (!state)
+            if (!state || state.settings.autoNotes)
                 return;
             state.noteMode = !state.noteMode;
             renderPlayBoard(state);
@@ -692,6 +744,8 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === 'y')
         return redo();
     if (e.key.toLowerCase() === 'n') {
+        if (state.settings.autoNotes)
+            return;
         state.noteMode = !state.noteMode;
         return render();
     }

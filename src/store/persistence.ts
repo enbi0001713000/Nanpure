@@ -100,7 +100,8 @@ const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
   mistakeHighlight: true,
   highlightSameNumber: true,
-  toggleToErase: true
+  toggleToErase: true,
+  autoNotes: false
 };
 
 function readJson(key: string): unknown {
@@ -124,7 +125,8 @@ export function loadSettings(): Settings {
     darkMode: settings.darkMode !== false,
     mistakeHighlight: settings.mistakeHighlight !== false,
     highlightSameNumber: settings.highlightSameNumber !== false,
-    toggleToErase: settings.toggleToErase !== false
+    toggleToErase: settings.toggleToErase !== false,
+    autoNotes: settings.autoNotes === true
   };
 }
 
