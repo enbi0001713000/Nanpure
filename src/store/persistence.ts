@@ -11,6 +11,7 @@ export type SaveData = {
   noteMode: boolean;
   elapsedMs: number;
   hintUses: number;
+  mistakeCount: number;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
   recentPuzzleIds: Record<Difficulty, string[]>;
@@ -22,10 +23,10 @@ const STATS_KEY = 'np_stats_v1';
 const RECENT_AVG_SAMPLE_SIZE = 5;
 
 const DEFAULT_STATS: GameStats = {
-  easy: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-  medium: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-  hard: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-  oni: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] }
+  easy: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  medium: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  hard: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  oni: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] }
 };
 
 function safeGetItem(key: string): string | null {
@@ -145,6 +146,7 @@ export function loadSave(): SaveData | null {
     history: Array.isArray(save.history) ? save.history : [],
     future: Array.isArray(save.future) ? save.future : [],
     hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0,
+    mistakeCount: typeof save.mistakeCount === 'number' && Number.isFinite(save.mistakeCount) ? Math.max(0, Math.floor(save.mistakeCount)) : 0,
     recentPuzzleIds: sanitizeRecentPuzzleIds(save.recentPuzzleIds)
   };
 }
@@ -179,11 +181,14 @@ export function loadStats(): GameStats {
   const readDifficulty = (difficulty: Difficulty) => {
     const value = source[difficulty];
     const clearCount = typeof value?.clearCount === 'number' && Number.isFinite(value.clearCount) ? Math.max(0, Math.floor(value.clearCount)) : 0;
+    const noMissClearCount =
+      typeof value?.noMissClearCount === 'number' && Number.isFinite(value.noMissClearCount) ? Math.max(0, Math.floor(value.noMissClearCount)) : 0;
     const bestMs = typeof value?.bestMs === 'number' && Number.isFinite(value.bestMs) ? Math.max(0, Math.floor(value.bestMs)) : null;
     const recentClearsMs = readRecentClears(value?.recentClearsMs);
     const recentAvgMsFromData = typeof value?.recentAvgMs === 'number' && Number.isFinite(value.recentAvgMs) ? Math.max(0, Math.floor(value.recentAvgMs)) : null;
     return {
       clearCount,
+      noMissClearCount,
       bestMs,
       recentClearsMs,
       recentAvgMs: calcAvg(recentClearsMs) ?? recentAvgMsFromData
@@ -202,7 +207,7 @@ export function saveStats(stats: GameStats) {
   safeSetItem(STATS_KEY, JSON.stringify(stats));
 }
 
-export function recordClearStats(difficulty: Difficulty, elapsedMs: number): GameStats {
+export function recordClearStats(difficulty: Difficulty, elapsedMs: number, noMiss: boolean): GameStats {
   const next = loadStats();
   const prev = next[difficulty];
   const safeElapsed = Math.max(0, Math.floor(elapsedMs));
@@ -210,6 +215,7 @@ export function recordClearStats(difficulty: Difficulty, elapsedMs: number): Gam
   const recentAvgMs = Math.floor(recentClearsMs.reduce((sum, ms) => sum + ms, 0) / recentClearsMs.length);
   next[difficulty] = {
     clearCount: prev.clearCount + 1,
+    noMissClearCount: prev.noMissClearCount + (noMiss ? 1 : 0),
     bestMs: prev.bestMs === null ? safeElapsed : Math.min(prev.bestMs, safeElapsed),
     recentClearsMs,
     recentAvgMs

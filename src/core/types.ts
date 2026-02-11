@@ -26,6 +26,7 @@ export type HistorySnapshot = {
 export type DifficultyStats = {
   bestMs: number | null;
   clearCount: number;
+  noMissClearCount: number;
   recentAvgMs: number | null;
   recentClearsMs: number[];
 };

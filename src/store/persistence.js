@@ -3,10 +3,10 @@ const SAVE_KEY = 'np_save_v1';
 const STATS_KEY = 'np_stats_v1';
 const RECENT_AVG_SAMPLE_SIZE = 5;
 const DEFAULT_STATS = {
-    easy: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-    medium: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-    hard: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
-    oni: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] }
+    easy: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+    medium: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+    hard: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+    oni: { bestMs: null, clearCount: 0, noMissClearCount: 0, recentAvgMs: null, recentClearsMs: [] }
 };
 function safeGetItem(key) {
     try {
@@ -111,6 +111,7 @@ export function loadSave() {
         history: Array.isArray(save.history) ? save.history : [],
         future: Array.isArray(save.future) ? save.future : [],
         hintUses: typeof save.hintUses === 'number' ? save.hintUses : 0,
+        mistakeCount: typeof save.mistakeCount === 'number' && Number.isFinite(save.mistakeCount) ? Math.max(0, Math.floor(save.mistakeCount)) : 0,
         recentPuzzleIds: sanitizeRecentPuzzleIds(save.recentPuzzleIds)
     };
 }
@@ -142,11 +143,13 @@ export function loadStats() {
     const readDifficulty = (difficulty) => {
         const value = source[difficulty];
         const clearCount = typeof value?.clearCount === 'number' && Number.isFinite(value.clearCount) ? Math.max(0, Math.floor(value.clearCount)) : 0;
+        const noMissClearCount = typeof value?.noMissClearCount === 'number' && Number.isFinite(value.noMissClearCount) ? Math.max(0, Math.floor(value.noMissClearCount)) : 0;
         const bestMs = typeof value?.bestMs === 'number' && Number.isFinite(value.bestMs) ? Math.max(0, Math.floor(value.bestMs)) : null;
         const recentClearsMs = readRecentClears(value?.recentClearsMs);
         const recentAvgMsFromData = typeof value?.recentAvgMs === 'number' && Number.isFinite(value.recentAvgMs) ? Math.max(0, Math.floor(value.recentAvgMs)) : null;
         return {
             clearCount,
+            noMissClearCount,
             bestMs,
             recentClearsMs,
             recentAvgMs: calcAvg(recentClearsMs) ?? recentAvgMsFromData
@@ -162,7 +165,7 @@ export function loadStats() {
 export function saveStats(stats) {
     safeSetItem(STATS_KEY, JSON.stringify(stats));
 }
-export function recordClearStats(difficulty, elapsedMs) {
+export function recordClearStats(difficulty, elapsedMs, noMiss) {
     const next = loadStats();
     const prev = next[difficulty];
     const safeElapsed = Math.max(0, Math.floor(elapsedMs));
@@ -170,6 +173,7 @@ export function recordClearStats(difficulty, elapsedMs) {
     const recentAvgMs = Math.floor(recentClearsMs.reduce((sum, ms) => sum + ms, 0) / recentClearsMs.length);
     next[difficulty] = {
         clearCount: prev.clearCount + 1,
+        noMissClearCount: prev.noMissClearCount + (noMiss ? 1 : 0),
         bestMs: prev.bestMs === null ? safeElapsed : Math.min(prev.bestMs, safeElapsed),
         recentClearsMs,
         recentAvgMs

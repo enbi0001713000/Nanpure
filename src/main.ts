@@ -17,6 +17,7 @@ type State = {
   future: HistorySnapshot[];
   stats: GameStats;
   clearRecorded: boolean;
+  mistakeCount: number;
   settingsOpen: boolean;
 };
 
@@ -128,6 +129,7 @@ function newGame(difficulty: Difficulty) {
     future: [],
     stats: loadStats(),
     clearRecorded: false,
+    mistakeCount: 0,
     settingsOpen: false
   };
   hasPendingSave = false;
@@ -157,6 +159,7 @@ function restoreSave() {
     future: save.future,
     stats: loadStats(),
     clearRecorded: false,
+    mistakeCount: save.mistakeCount,
     settingsOpen: false
   };
   hasPendingSave = false;
@@ -178,6 +181,7 @@ function serialize() {
     noteMode: state.noteMode,
     elapsedMs: state.elapsedMs,
     hintUses: 0,
+    mistakeCount: state.mistakeCount,
     history: state.history,
     future: state.future,
     recentPuzzleIds
@@ -229,6 +233,10 @@ function inputValue(value: number) {
     else cell.notes.add(value);
   } else {
     const next = cell.value === value && state.settings.toggleToErase ? 0 : value;
+    if (next !== 0) {
+      const answer = state.solution[pos.r][pos.c];
+      if (next !== answer) state.mistakeCount += 1;
+    }
     cell.value = next;
     cell.notes.clear();
   }
@@ -353,26 +361,27 @@ function renderUsernameModal(): string {
 function renderSummaryCard(stats: GameStats): string {
   const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'oni'];
   const totalClears = difficulties.reduce((sum, diff) => sum + stats[diff].clearCount, 0);
+  const totalNoMissClears = difficulties.reduce((sum, diff) => sum + stats[diff].noMissClearCount, 0);
   const bests = difficulties.map((diff) => stats[diff].bestMs).filter((ms): ms is number => ms !== null);
   const bestEver = bests.length ? Math.min(...bests) : null;
 
   const rows = difficulties
     .map((diff) => {
       const entry = stats[diff];
-      return `<li><span>${difficultyLabel(diff)}</span><span>CLR ${entry.clearCount} / BEST ${formattedBestTime(entry.bestMs)} / AVG ${formattedRecentAverage(entry.recentAvgMs)}</span></li>`;
+      return `<li><span>${difficultyLabel(diff)}</span><span>CLR ${entry.clearCount} / NM ${entry.noMissClearCount} / BEST ${formattedBestTime(entry.bestMs)} / AVG ${formattedRecentAverage(entry.recentAvgMs)}</span></li>`;
     })
     .join('');
 
   return `<section class="summary-card">
     <h3>実績サマリー</h3>
-    <p class="summary-total">総クリア数: <strong>${totalClears}</strong> / 全難易度ベスト: <strong>${formattedBestTime(bestEver)}</strong></p>
+    <p class="summary-total">総クリア数: <strong>${totalClears}</strong> / ノーミス総クリア: <strong>${totalNoMissClears}</strong> / 全難易度ベスト: <strong>${formattedBestTime(bestEver)}</strong></p>
     <ul class="summary-list">${rows}</ul>
   </section>`;
 }
 
 function renderResultModal(game: State): string {
   const difficultyStats = game.stats[game.difficulty];
-  return `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>${normalizeUsername(getUsername()) || '匿名'} / ${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</p><section class="result-stats"><h3>今回の戦績</h3><p>クリア回数: ${difficultyStats.clearCount}</p><p>ベスト: ${formattedBestTime(difficultyStats.bestMs)}</p><p>直近平均(5件): ${formattedRecentAverage(difficultyStats.recentAvgMs)}</p></section><div class="row" style="margin-top:10px;"><button data-act="share-x">X共有</button><button data-act="copy">コピー</button></div><div class="row" style="margin-top:10px;"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`;
+  return `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>${normalizeUsername(getUsername()) || '匿名'} / ${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</p><section class="result-stats"><h3>今回の戦績</h3><p>ミス回数: ${game.mistakeCount}</p><p>ノーミス判定: ${game.mistakeCount === 0 ? '達成' : '未達成'}</p><p>クリア回数: ${difficultyStats.clearCount}</p><p>ノーミスクリア回数: ${difficultyStats.noMissClearCount}</p><p>ベスト: ${formattedBestTime(difficultyStats.bestMs)}</p><p>直近平均(5件): ${formattedRecentAverage(difficultyStats.recentAvgMs)}</p></section><div class="row" style="margin-top:10px;"><button data-act="share-x">X共有</button><button data-act="copy">コピー</button></div><div class="row" style="margin-top:10px;"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`;
 }
 
 function renderHome() {
@@ -545,7 +554,7 @@ function renderPlayMeta(game: State) {
   const meta = app.querySelector<HTMLDivElement>('.meta');
   const stats = game.stats[game.difficulty];
   if (meta) {
-    meta.textContent = `${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(stats.bestMs)} / AVG ${formattedRecentAverage(stats.recentAvgMs)} / CLR ${stats.clearCount}`;
+    meta.textContent = `${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(stats.bestMs)} / AVG ${formattedRecentAverage(stats.recentAvgMs)} / CLR ${stats.clearCount} / NM ${stats.noMissClearCount}`;
   }
   const settingsBtn = app.querySelector<HTMLButtonElement>('button[data-act="settings"]');
   if (settingsBtn) settingsBtn.setAttribute('aria-expanded', String(game.settingsOpen));
@@ -567,7 +576,7 @@ function renderPlayBoard(game: State) {
   const stats = game.stats[game.difficulty];
   const statsEl = app.querySelector<HTMLElement>('.play-stats');
   if (statsEl) {
-    statsEl.textContent = `戦績: CLR ${stats.clearCount} / BEST ${formattedBestTime(stats.bestMs)} / 直近平均 ${formattedRecentAverage(stats.recentAvgMs)}`;
+    statsEl.textContent = `戦績: CLR ${stats.clearCount} / NM ${stats.noMissClearCount} / BEST ${formattedBestTime(stats.bestMs)} / 直近平均 ${formattedRecentAverage(stats.recentAvgMs)} / 今回ミス ${game.mistakeCount}`;
   }
   perfCounters.boardRenders += 1;
   renderDevCounters();
@@ -581,6 +590,7 @@ function renderPlayModal(game: State, cleared: boolean) {
       ? `<div class="modal-overlay"><section class="modal"><header class="modal-header"><h2>設定</h2><button class="modal-close" data-act="settings-close">×</button></header>
       <label class="setting-check"><input data-setting="darkMode" type="checkbox" ${game.settings.darkMode ? 'checked' : ''}/> ダークモード</label>
       <label class="setting-check"><input data-setting="mistakeHighlight" type="checkbox" ${game.settings.mistakeHighlight ? 'checked' : ''}/> ミス表示</label>
+      <p class="setting-note">※ ミス表示がOFFでも、ミス回数の内部カウントは継続されます。</p>
       <label class="setting-check"><input data-setting="highlightSameNumber" type="checkbox" ${game.settings.highlightSameNumber ? 'checked' : ''}/> 同一数字ハイライト</label>
       <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${game.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
       </section></div>`
@@ -603,7 +613,7 @@ function renderPlay() {
     if (!game.clearRecorded) {
       game.clearRecorded = true;
       clearSave();
-      game.stats = recordClearStats(game.difficulty, game.elapsedMs);
+      game.stats = recordClearStats(game.difficulty, game.elapsedMs, game.mistakeCount === 0);
     }
   }
 
