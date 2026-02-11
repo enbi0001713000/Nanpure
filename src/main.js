@@ -84,6 +84,7 @@ function rebuildAutoNotes() {
         }
     }
 }
+
 function clearAllNotes() {
     if (!state)
         return;
@@ -93,6 +94,7 @@ function clearAllNotes() {
         }
     }
 }
+
 function createCells(values, initial) {
     return values.map((row, r) => row.map((value, c) => ({
         value,
@@ -285,6 +287,7 @@ function toggleSetting(key) {
             state.noteMode = false;
             rebuildAutoNotes();
         }
+
         else {
             clearAllNotes();
         }
