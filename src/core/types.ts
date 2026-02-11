@@ -26,6 +26,8 @@ export type HistorySnapshot = {
 export type DifficultyStats = {
   bestMs: number | null;
   clearCount: number;
+  recentAvgMs: number | null;
+  recentClearsMs: number[];
 };
 
 export type GameStats = Record<Difficulty, DifficultyStats>;
