@@ -27,6 +27,15 @@ export function isValidPlacement(grid: number[][], row: number, col: number, val
   return true;
 }
 
+export function getCandidates(grid: number[][], row: number, col: number): number[] {
+  if (grid[row][col] !== 0) return [];
+  const candidates: number[] = [];
+  for (let value = 1; value <= 9; value++) {
+    if (isValidPlacement(grid, row, col, value)) candidates.push(value);
+  }
+  return candidates;
+}
+
 export function getConflicts(grid: number[][]): boolean[][] {
   const conflicts = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => false));
   for (let r = 0; r < 9; r++) {

@@ -1,12 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getConflicts, isCompleteAndValid, toGrid } from './sudoku.js';
+import { getCandidates, getConflicts, isCompleteAndValid, toGrid } from './sudoku.js';
 
 test('detects row conflicts', () => {
   const grid = toGrid('550070000600195000098000060800060003400803001700020006060000280000419005000080079');
   const conflicts = getConflicts(grid);
   assert.equal(conflicts[0][0], true);
   assert.equal(conflicts[0][1], true);
+});
+
+
+test('returns candidates for empty cells in ascending order', () => {
+  const grid = toGrid('530070000600195000098000060800060003400803001700020006060000280000419005000080079');
+  assert.deepEqual(getCandidates(grid, 0, 2), [1, 2, 4]);
+});
+
+test('returns empty candidates for filled cells', () => {
+  const grid = toGrid('530070000600195000098000060800060003400803001700020006060000280000419005000080079');
+  assert.deepEqual(getCandidates(grid, 0, 0), []);
 });
 
 test('validates solved puzzle', () => {
