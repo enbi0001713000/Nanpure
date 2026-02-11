@@ -108,23 +108,28 @@ function createGame(difficulty) {
 function restoreSave() {
   const save = loadSave();
   if (!save) return;
-  appState.game = {
-    difficulty: save.difficulty,
-    initial: save.initial,
-    solution: save.solution,
-    cells: save.values.map((row, r) =>
-      row.map((v, c) => ({ value: v, fixed: save.fixed[r][c], notes: new Set(save.notes[r][c]) }))
-    ),
-    selected: save.selected,
-    noteMode: save.noteMode,
-    settings: loadSettings(),
-    elapsedMs: save.elapsedMs,
-    hintUses: save.hintUses ?? 0,
-    timerRunning: true,
-    history: save.history ?? [],
-    future: save.future ?? [],
-    cleared: false
-  };
+  try {
+    appState.game = {
+      difficulty: difficulties.includes(save.difficulty) ? save.difficulty : 'easy',
+      initial: save.initial,
+      solution: save.solution,
+      cells: save.values.map((row, r) =>
+        row.map((v, c) => ({ value: v, fixed: save.fixed[r][c], notes: new Set(save.notes[r][c]) }))
+      ),
+      selected: save.selected,
+      noteMode: save.noteMode,
+      settings: loadSettings(),
+      elapsedMs: save.elapsedMs,
+      hintUses: save.hintUses ?? 0,
+      timerRunning: true,
+      history: Array.isArray(save.history) ? save.history : [],
+      future: Array.isArray(save.future) ? save.future : [],
+      cleared: false
+    };
+  } catch {
+    clearSave();
+    appState.game = null;
+  }
 }
 
 function serialize() {
@@ -794,15 +799,23 @@ window.addEventListener('orientationchange', () => {
   updatePlayViewportHeight();
   requestPlayLayoutSync();
 });
-updatePlayViewportHeight();
-setupViewportListeners();
-setInterval(() => {
-  if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
-  appState.game.elapsedMs += 1000;
-  const meta = app.querySelector('.meta');
-  if (meta) meta.textContent = `${formattedDifficultyLabel(appState.game.difficulty)} / ${formattedTime(appState.game.elapsedMs)}`;
-  scheduleSave();
-}, 1000);
+function bootstrap() {
+  try {
+    updatePlayViewportHeight();
+    setupViewportListeners();
+    setInterval(() => {
+      if (appState.screen !== 'play' || !appState.game?.timerRunning) return;
+      appState.game.elapsedMs += 1000;
+      const meta = app.querySelector('.meta');
+      if (meta) meta.textContent = `${formattedDifficultyLabel(appState.game.difficulty)} / ${formattedTime(appState.game.elapsedMs)}`;
+      scheduleSave();
+    }, 1000);
 
-restoreSave();
-render();
+    restoreSave();
+    render();
+  } catch (error) {
+    showFatalScreen(error);
+  }
+}
+
+bootstrap();
