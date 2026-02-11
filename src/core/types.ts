@@ -13,6 +13,7 @@ export type Settings = {
   mistakeHighlight: boolean;
   highlightSameNumber: boolean;
   toggleToErase: boolean;
+  autoNotes: boolean;
 };
 
 export type SnapshotCell = { value: number; notes: number[] };
