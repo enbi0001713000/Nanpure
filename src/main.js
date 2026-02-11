@@ -359,14 +359,19 @@ async function copyResult() {
 function renderHome() {
   return `
   <section class="screen home">
+    <div class="home-noise" aria-hidden="true"></div>
     <div class="home-glow home-glow-left" aria-hidden="true"></div>
     <div class="home-glow home-glow-right" aria-hidden="true"></div>
     <div class="home-grid home-grid-left" aria-hidden="true"></div>
     <div class="home-grid home-grid-right" aria-hidden="true"></div>
+    <div class="home-arc home-arc-left" aria-hidden="true"></div>
+    <div class="home-arc home-arc-right" aria-hidden="true"></div>
     <button class="icon-button" data-act="open-settings" aria-label="設定">⚙</button>
-    <h1 class="home-title">ナンプレ</h1>
-    <p class="home-subtitle">-えびの挑戦状-</p>
-    <button class="primary cta" data-act="go-select">挑戦する</button>
+    <div class="home-center">
+      <h1 class="home-title">ナンプレ</h1>
+      <p class="home-subtitle">-えびの挑戦状-</p>
+      <button class="primary cta" data-act="go-select">挑戦する</button>
+    </div>
   </section>`;
 }
 
@@ -503,7 +508,8 @@ function requestPlayLayoutSync() {
 
 
 function updatePlayViewportHeight() {
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  const viewport = window.visualViewport;
+  const viewportHeight = viewport ? viewport.height * Math.max(1, viewport.scale || 1) : window.innerHeight;
   document.documentElement.style.setProperty('--play-viewport-height', `${Math.round(viewportHeight)}px`);
 }
 
