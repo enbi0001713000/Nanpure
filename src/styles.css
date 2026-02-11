@@ -610,6 +610,12 @@ body.dark .modal input:not([type='checkbox']) {
   align-items: center;
 }
 
+.setting-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
 .theme-toggle-btn,
 .modal .wide,
 .modal .primary { width: 100%; margin-top: 10px; }
