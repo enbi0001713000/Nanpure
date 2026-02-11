@@ -22,12 +22,40 @@ type State = {
 
 type Screen = 'home' | 'select' | 'play';
 
+const USERNAME_KEY = 'np_username_v1';
+const HASH_TAG = '#えびナンプレ';
+
 let screen: Screen = 'home';
 let state: State | null = null;
+let usernameModalOpen = false;
+let usernameDraft = '';
 
 const appEl = document.querySelector<HTMLDivElement>('#app');
 if (!appEl) throw new Error('App root not found');
 const app = appEl;
+
+function getUsername(): string {
+  try {
+    return localStorage.getItem(USERNAME_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function setUsername(value: string) {
+  try {
+    localStorage.setItem(USERNAME_KEY, value);
+  } catch {}
+}
+
+function normalizeUsername(value: string): string {
+  return value.trim();
+}
+
+function isValidUsername(value: string): boolean {
+  const normalized = normalizeUsername(value);
+  return normalized.length >= 1 && normalized.length <= 12;
+}
 
 function cloneSnapshot(): HistorySnapshot {
   if (!state) throw new Error('Game state not initialized');
@@ -232,7 +260,55 @@ function formattedBestTime(ms: number | null) {
   return ms === null ? '--:--' : formattedTime(ms);
 }
 
+function difficultyLabel(difficulty: Difficulty): string {
+  if (difficulty === 'easy') return 'EASY';
+  if (difficulty === 'medium') return 'NORMAL';
+  if (difficulty === 'hard') return 'HARD';
+  return 'ONI';
+}
+
+function clearText(): string {
+  if (!state) return '';
+  const name = normalizeUsername(getUsername()) || '匿名';
+  return `${name} が ${difficultyLabel(state.difficulty)} を ${formattedTime(state.elapsedMs)} でクリア！ ${HASH_TAG}`;
+}
+
+function shareUrl(): string {
+  const text = encodeURIComponent(clearText());
+  const url = encodeURIComponent(window.location.href);
+  return `https://x.com/intent/tweet?text=${text}&url=${url}`;
+}
+
+async function copyShareText() {
+  try {
+    await navigator.clipboard.writeText(`${clearText()}\n${window.location.href}`);
+    window.alert('共有文をコピーしました。');
+  } catch {
+    window.alert('コピーに失敗しました。');
+  }
+}
+
+function renderUsernameModal(): string {
+  if (!usernameModalOpen) return '';
+  return `<div class="modal-overlay">
+    <section class="modal">
+      <header class="modal-header">
+        <h2>ユーザー名を設定</h2>
+      </header>
+      <p>クリア後のX共有・コピーで表示されます（1〜12文字）。</p>
+      <label>
+        名前
+        <input data-role="username-input" type="text" maxlength="12" value="${usernameDraft}" placeholder="プレイヤー名" />
+      </label>
+      <button data-act="save-username" class="primary">この名前で進む</button>
+      <button data-act="anonymous" class="ghost wide">匿名でプレイ</button>
+    </section>
+  </div>`;
+}
+
 function renderHome() {
+  const darkMode = loadSettings().darkMode;
+  document.body.classList.toggle('dark', darkMode);
   app.innerHTML = `
   <main class="app-main">
     <section class="screen home">
@@ -240,8 +316,8 @@ function renderHome() {
       <div class="home-grid home-grid-left" aria-hidden="true"></div>
       <div class="home-grid home-grid-right" aria-hidden="true"></div>
       <div class="home-center">
-        <h1 class="home-title">Nanpure</h1>
-        <p class="home-subtitle">Web</p>
+        <h1 class="home-title">ナンプレ</h1>
+        <p class="home-subtitle">-えびの挑戦状-</p>
         <button class="cta" data-act="go-select">挑戦する</button>
       </div>
     </section>
@@ -251,12 +327,16 @@ function renderHome() {
   if (goSelect) {
     goSelect.onclick = () => {
       screen = 'select';
+      usernameDraft = getUsername();
+      usernameModalOpen = !isValidUsername(usernameDraft);
       render();
     };
   }
 }
 
 function renderSelect() {
+  const settings = loadSettings();
+  document.body.classList.toggle('dark', settings.darkMode);
   app.innerHTML = `
   <main class="app-main">
     <section class="screen select">
@@ -271,16 +351,55 @@ function renderSelect() {
         <button data-act="go-home" class="ghost">タイトルへ戻る</button>
       </div>
     </section>
+    ${renderUsernameModal()}
   </main>`;
 
   app.querySelectorAll<HTMLButtonElement>('button[data-new]').forEach((btn) => {
-    btn.onclick = () => newGame(btn.dataset.new as Difficulty);
+    btn.onclick = () => {
+      if (!isValidUsername(getUsername())) {
+        usernameDraft = getUsername();
+        usernameModalOpen = true;
+        render();
+        return;
+      }
+      newGame(btn.dataset.new as Difficulty);
+    };
   });
 
   const goHome = app.querySelector<HTMLButtonElement>('button[data-act="go-home"]');
   if (goHome) {
     goHome.onclick = () => {
       screen = 'home';
+      usernameModalOpen = false;
+      render();
+    };
+  }
+
+  const usernameInput = app.querySelector<HTMLInputElement>('input[data-role="username-input"]');
+  if (usernameInput) {
+    usernameInput.oninput = () => {
+      usernameDraft = usernameInput.value;
+    };
+  }
+
+  const saveUsername = app.querySelector<HTMLButtonElement>('button[data-act="save-username"]');
+  if (saveUsername) {
+    saveUsername.onclick = () => {
+      if (!isValidUsername(usernameDraft)) {
+        window.alert('名前は1〜12文字で入力してください。');
+        return;
+      }
+      setUsername(normalizeUsername(usernameDraft));
+      usernameModalOpen = false;
+      render();
+    };
+  }
+
+  const anonymous = app.querySelector<HTMLButtonElement>('button[data-act="anonymous"]');
+  if (anonymous) {
+    anonymous.onclick = () => {
+      setUsername('匿名');
+      usernameModalOpen = false;
       render();
     };
   }
@@ -288,19 +407,20 @@ function renderSelect() {
 
 function renderPlay() {
   if (!state) return;
-  document.body.classList.toggle('dark', state.settings.darkMode);
+  const game = state;
+  document.body.classList.toggle('dark', game.settings.darkMode);
 
-  const values = state.cells.map((r) => r.map((c) => c.value));
+  const values = game.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
-  const selectedValue = state.selected ? values[state.selected.r][state.selected.c] : 0;
+  const selectedValue = game.selected ? values[game.selected.r][game.selected.c] : 0;
   const cleared = isCompleteAndValid(values);
-  const difficultyStats = state.stats[state.difficulty];
+  const difficultyStats = game.stats[game.difficulty];
   if (cleared) {
-    state.timerRunning = false;
-    if (!state.clearRecorded) {
-      state.clearRecorded = true;
+    game.timerRunning = false;
+    if (!game.clearRecorded) {
+      game.clearRecorded = true;
       clearSave();
-      state.stats = recordClearStats(state.difficulty, state.elapsedMs);
+      game.stats = recordClearStats(game.difficulty, game.elapsedMs);
     }
   }
 
@@ -310,26 +430,26 @@ function renderPlay() {
       <div class="play-root">
         <header class="play-header">
           <button data-act="go-select">難易度</button>
-          <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
-          <button data-act="settings" class="icon-button settings-button" aria-expanded="${state.settingsOpen}" aria-label="設定を開く">⚙️</button>
+          <div class="meta">${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+          <button data-act="settings" class="icon-button settings-button" aria-expanded="${game.settingsOpen}" aria-label="設定を開く">⚙️</button>
         </header>
         <section class="controls top">
           <button data-act="undo">Undo</button>
           <button data-act="redo">Redo</button>
-          <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
+          <button data-act="note" class="${game.noteMode ? 'active' : ''}">メモ</button>
           <button data-act="hint">ヒント</button>
         </section>
-        <div class="memo-indicator ${state.noteMode ? 'on' : ''}">メモモード: ${state.noteMode ? 'ON' : 'OFF'}</div>
+        <div class="memo-indicator ${game.noteMode ? 'on' : ''}">メモモード: ${game.noteMode ? 'ON' : 'OFF'}</div>
         <div class="board-area">
           <section class="board" role="grid" aria-label="ナンプレ盤面">
-            ${state.cells
+            ${game.cells
               .map((row, r) =>
                 row
                   .map((cell, c) => {
-                    const selected = state?.selected?.r === r && state?.selected?.c === c;
-                    const peer = state?.selected ? isPeer(state.selected, { r, c }) : false;
-                    const same = state?.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
-                    const conflict = state?.settings.mistakeHighlight && conflicts[r][c];
+                    const selected = game.selected?.r === r && game.selected?.c === c;
+                    const peer = game.selected ? isPeer(game.selected, { r, c }) : false;
+                    const same = game.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
+                    const conflict = game.settings.mistakeHighlight && conflicts[r][c];
                     const classes = ['cell', selected ? 'selected' : '', peer ? 'peer' : '', same ? 'same' : '', conflict ? 'conflict' : '', cell.fixed ? 'fixed' : ''].join(' ');
 
                     if (cell.value !== 0) {
@@ -353,19 +473,19 @@ function renderPlay() {
     </section>
 
     ${
-      state.settingsOpen
+      game.settingsOpen
         ? `<div class="modal-overlay"><section class="modal"><header class="modal-header"><h2>設定</h2><button class="modal-close" data-act="settings-close">×</button></header>
-      <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/> ダークモード</label>
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/> ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/> 同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
+      <label class="setting-check"><input data-setting="darkMode" type="checkbox" ${game.settings.darkMode ? 'checked' : ''}/> ダークモード</label>
+      <label class="setting-check"><input data-setting="mistakeHighlight" type="checkbox" ${game.settings.mistakeHighlight ? 'checked' : ''}/> ミス表示</label>
+      <label class="setting-check"><input data-setting="highlightSameNumber" type="checkbox" ${game.settings.highlightSameNumber ? 'checked' : ''}/> 同一数字ハイライト</label>
+      <label class="setting-check"><input data-setting="toggleToErase" type="checkbox" ${game.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
       </section></div>`
         : ''
     }
 
     ${
       cleared
-        ? `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>今回: ${formattedTime(state.elapsedMs)}</p><p>ベスト: ${formattedBestTime(difficultyStats.bestMs)}</p><div class="row"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`
+        ? `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>${normalizeUsername(getUsername()) || '匿名'} / ${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</p><div class="row" style="margin-top:10px;"><button data-act="share-x">X共有</button><button data-act="copy">コピー</button></div><div class="row" style="margin-top:10px;"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`
         : ''
     }
   </main>`;
@@ -418,6 +538,11 @@ function wirePlayEvents() {
       render();
     };
   }
+  const shareBtn = byAct('share-x');
+  if (shareBtn) shareBtn.onclick = () => window.open(shareUrl(), '_blank', 'noopener,noreferrer');
+  const copyBtn = byAct('copy');
+  if (copyBtn) copyBtn.onclick = () => void copyShareText();
+
   const retryBtn = byAct('retry');
   if (retryBtn) {
     retryBtn.onclick = () => {
@@ -478,7 +603,7 @@ setInterval(() => {
   const meta = app.querySelector<HTMLDivElement>('.meta');
   if (meta) {
     const difficultyStats = state.stats[state.difficulty];
-    meta.textContent = `${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
+    meta.textContent = `${difficultyLabel(state.difficulty)} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
   }
   scheduleSave();
 }, 1000);
