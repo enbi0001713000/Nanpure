@@ -19,12 +19,13 @@ export type SaveData = {
 const SETTINGS_KEY = 'np_settings_v1';
 const SAVE_KEY = 'np_save_v1';
 const STATS_KEY = 'np_stats_v1';
+const RECENT_AVG_SAMPLE_SIZE = 5;
 
 const DEFAULT_STATS: GameStats = {
-  easy: { bestMs: null, clearCount: 0 },
-  medium: { bestMs: null, clearCount: 0 },
-  hard: { bestMs: null, clearCount: 0 },
-  oni: { bestMs: null, clearCount: 0 }
+  easy: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  medium: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  hard: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] },
+  oni: { bestMs: null, clearCount: 0, recentAvgMs: null, recentClearsMs: [] }
 };
 
 function safeGetItem(key: string): string | null {
@@ -161,11 +162,32 @@ export function loadStats(): GameStats {
   if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_STATS };
   const source = parsed as Partial<GameStats>;
 
+  const readRecentClears = (value: unknown): number[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((ms): ms is number => typeof ms === 'number' && Number.isFinite(ms))
+      .map((ms) => Math.max(0, Math.floor(ms)))
+      .slice(-RECENT_AVG_SAMPLE_SIZE);
+  };
+
+  const calcAvg = (times: number[]): number | null => {
+    if (times.length === 0) return null;
+    const total = times.reduce((sum, ms) => sum + ms, 0);
+    return Math.floor(total / times.length);
+  };
+
   const readDifficulty = (difficulty: Difficulty) => {
     const value = source[difficulty];
     const clearCount = typeof value?.clearCount === 'number' && Number.isFinite(value.clearCount) ? Math.max(0, Math.floor(value.clearCount)) : 0;
     const bestMs = typeof value?.bestMs === 'number' && Number.isFinite(value.bestMs) ? Math.max(0, Math.floor(value.bestMs)) : null;
-    return { clearCount, bestMs };
+    const recentClearsMs = readRecentClears(value?.recentClearsMs);
+    const recentAvgMsFromData = typeof value?.recentAvgMs === 'number' && Number.isFinite(value.recentAvgMs) ? Math.max(0, Math.floor(value.recentAvgMs)) : null;
+    return {
+      clearCount,
+      bestMs,
+      recentClearsMs,
+      recentAvgMs: calcAvg(recentClearsMs) ?? recentAvgMsFromData
+    };
   };
 
   return {
@@ -184,9 +206,13 @@ export function recordClearStats(difficulty: Difficulty, elapsedMs: number): Gam
   const next = loadStats();
   const prev = next[difficulty];
   const safeElapsed = Math.max(0, Math.floor(elapsedMs));
+  const recentClearsMs = [...prev.recentClearsMs, safeElapsed].slice(-RECENT_AVG_SAMPLE_SIZE);
+  const recentAvgMs = Math.floor(recentClearsMs.reduce((sum, ms) => sum + ms, 0) / recentClearsMs.length);
   next[difficulty] = {
     clearCount: prev.clearCount + 1,
-    bestMs: prev.bestMs === null ? safeElapsed : Math.min(prev.bestMs, safeElapsed)
+    bestMs: prev.bestMs === null ? safeElapsed : Math.min(prev.bestMs, safeElapsed),
+    recentClearsMs,
+    recentAvgMs
   };
   saveStats(next);
   return next;

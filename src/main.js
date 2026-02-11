@@ -244,6 +244,9 @@ function formattedTime(ms) {
 function formattedBestTime(ms) {
     return ms === null ? '--:--' : formattedTime(ms);
 }
+function formattedRecentAverage(ms) {
+    return ms === null ? '--:--' : formattedTime(ms);
+}
 function difficultyLabel(difficulty) {
     if (difficulty === 'easy')
         return 'EASY';
@@ -291,6 +294,27 @@ function renderUsernameModal() {
     </section>
   </div>`;
 }
+function renderSummaryCard(stats) {
+    const difficulties = ['easy', 'medium', 'hard', 'oni'];
+    const totalClears = difficulties.reduce((sum, diff) => sum + stats[diff].clearCount, 0);
+    const bests = difficulties.map((diff) => stats[diff].bestMs).filter((ms) => ms !== null);
+    const bestEver = bests.length ? Math.min(...bests) : null;
+    const rows = difficulties
+        .map((diff) => {
+        const entry = stats[diff];
+        return `<li><span>${difficultyLabel(diff)}</span><span>CLR ${entry.clearCount} / BEST ${formattedBestTime(entry.bestMs)} / AVG ${formattedRecentAverage(entry.recentAvgMs)}</span></li>`;
+    })
+        .join('');
+    return `<section class="summary-card">
+    <h3>実績サマリー</h3>
+    <p class="summary-total">総クリア数: <strong>${totalClears}</strong> / 全難易度ベスト: <strong>${formattedBestTime(bestEver)}</strong></p>
+    <ul class="summary-list">${rows}</ul>
+  </section>`;
+}
+function renderResultModal(game) {
+    const difficultyStats = game.stats[game.difficulty];
+    return `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>${normalizeUsername(getUsername()) || '匿名'} / ${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</p><section class="result-stats"><h3>今回の戦績</h3><p>クリア回数: ${difficultyStats.clearCount}</p><p>ベスト: ${formattedBestTime(difficultyStats.bestMs)}</p><p>直近平均(5件): ${formattedRecentAverage(difficultyStats.recentAvgMs)}</p></section><div class="row" style="margin-top:10px;"><button data-act="share-x">X共有</button><button data-act="copy">コピー</button></div><div class="row" style="margin-top:10px;"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`;
+}
 function renderHome() {
     const darkMode = loadSettings().darkMode;
     document.body.classList.toggle('dark', darkMode);
@@ -304,6 +328,7 @@ function renderHome() {
         <h1 class="home-title">ナンプレ</h1>
         <p class="home-subtitle">-えびの挑戦状-</p>
         <button class="cta" data-act="go-select">挑戦する</button>
+        ${renderSummaryCard(loadStats())}
       </div>
     </section>
   </main>`;
@@ -330,6 +355,7 @@ function renderSelect() {
         <button data-new="hard">難しい</button>
         <button data-new="oni">鬼</button>
       </div>
+      ${renderSummaryCard(loadStats())}
       <div class="row" style="margin-top:16px; justify-content:center;">
         <button data-act="go-home" class="ghost">タイトルへ戻る</button>
       </div>
@@ -391,7 +417,6 @@ function renderPlay() {
     const conflicts = getConflicts(values);
     const selectedValue = game.selected ? values[game.selected.r][game.selected.c] : 0;
     const cleared = isCompleteAndValid(values);
-    const difficultyStats = game.stats[game.difficulty];
     if (cleared) {
         game.timerRunning = false;
         if (!game.clearRecorded) {
@@ -400,13 +425,14 @@ function renderPlay() {
             game.stats = recordClearStats(game.difficulty, game.elapsedMs);
         }
     }
+    const difficultyStats = game.stats[game.difficulty];
     app.innerHTML = `
   <main class="app-main play-main">
     <section class="screen play">
       <div class="play-root">
         <header class="play-header">
           <button data-act="go-select">難易度</button>
-          <div class="meta">${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+          <div class="meta">${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / AVG ${formattedRecentAverage(difficultyStats.recentAvgMs)} / CLR ${difficultyStats.clearCount}</div>
           <button data-act="settings" class="icon-button settings-button" aria-expanded="${game.settingsOpen}" aria-label="設定を開く">⚙️</button>
         </header>
         <section class="controls top">
@@ -416,6 +442,7 @@ function renderPlay() {
           <button data-act="hint">ヒント</button>
         </section>
         <div class="memo-indicator ${game.noteMode ? 'on' : ''}">メモモード: ${game.noteMode ? 'ON' : 'OFF'}</div>
+        <section class="play-stats">戦績: CLR ${difficultyStats.clearCount} / BEST ${formattedBestTime(difficultyStats.bestMs)} / 直近平均 ${formattedRecentAverage(difficultyStats.recentAvgMs)}</section>
         <div class="board-area">
           <section class="board" role="grid" aria-label="ナンプレ盤面">
             ${game.cells
@@ -452,9 +479,7 @@ function renderPlay() {
       </section></div>`
         : ''}
 
-    ${cleared
-        ? `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>${normalizeUsername(getUsername()) || '匿名'} / ${difficultyLabel(game.difficulty)} / ${formattedTime(game.elapsedMs)}</p><div class="row" style="margin-top:10px;"><button data-act="share-x">X共有</button><button data-act="copy">コピー</button></div><div class="row" style="margin-top:10px;"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`
-        : ''}
+    ${cleared ? renderResultModal(game) : ''}
   </main>`;
     wirePlayEvents();
 }
@@ -580,7 +605,7 @@ setInterval(() => {
     const meta = app.querySelector('.meta');
     if (meta) {
         const difficultyStats = state.stats[state.difficulty];
-        meta.textContent = `${difficultyLabel(state.difficulty)} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}`;
+        meta.textContent = `${difficultyLabel(state.difficulty)} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / AVG ${formattedRecentAverage(difficultyStats.recentAvgMs)} / CLR ${difficultyStats.clearCount}`;
     }
     scheduleSave();
 }, 1000);
