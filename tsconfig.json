@@ -6,8 +6,8 @@
     "strict": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "lib": ["ES2020", "DOM"],
-    "types": ["vitest/globals"]
+    "lib": ["ES2020", "DOM"]
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }
