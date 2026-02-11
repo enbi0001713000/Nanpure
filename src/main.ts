@@ -12,7 +12,6 @@ type State = {
   noteMode: boolean;
   settings: Settings;
   elapsedMs: number;
-  hintUses: number;
   timerRunning: boolean;
   history: HistorySnapshot[];
   future: HistorySnapshot[];
@@ -21,12 +20,17 @@ type State = {
   settingsOpen: boolean;
 };
 
-let state: State;
+type Screen = 'home' | 'select' | 'play';
+
+let screen: Screen = 'home';
+let state: State | null = null;
+
 const appEl = document.querySelector<HTMLDivElement>('#app');
 if (!appEl) throw new Error('App root not found');
 const app = appEl;
 
 function cloneSnapshot(): HistorySnapshot {
+  if (!state) throw new Error('Game state not initialized');
   return {
     grid: state.cells.map((row) => row.map((cell) => ({ value: cell.value, notes: [...cell.notes] }))),
     selected: state.selected,
@@ -35,6 +39,7 @@ function cloneSnapshot(): HistorySnapshot {
 }
 
 function applySnapshot(snapshot: HistorySnapshot) {
+  if (!state) return;
   state.cells.forEach((row, r) => {
     row.forEach((cell, c) => {
       const s = snapshot.grid[r][c];
@@ -47,6 +52,7 @@ function applySnapshot(snapshot: HistorySnapshot) {
 }
 
 function pushHistory() {
+  if (!state) return;
   state.history.push(cloneSnapshot());
   if (state.history.length > 200) state.history.shift();
   state.future = [];
@@ -75,7 +81,6 @@ function newGame(difficulty: Difficulty) {
     noteMode: false,
     settings: loadSettings(),
     elapsedMs: 0,
-    hintUses: 0,
     timerRunning: true,
     history: [],
     future: [],
@@ -83,17 +88,13 @@ function newGame(difficulty: Difficulty) {
     clearRecorded: false,
     settingsOpen: false
   };
+  screen = 'play';
   render();
 }
 
-function restoreOrBoot() {
-  const settings = loadSettings();
+function restoreSave() {
   const save = loadSave();
-  if (!save) {
-    newGame('easy');
-    state.settings = settings;
-    return;
-  }
+  if (!save) return;
   state = {
     difficulty: save.difficulty,
     initial: save.initial,
@@ -103,9 +104,8 @@ function restoreOrBoot() {
     ),
     selected: save.selected,
     noteMode: save.noteMode,
-    settings,
+    settings: loadSettings(),
     elapsedMs: save.elapsedMs,
-    hintUses: save.hintUses,
     timerRunning: true,
     history: save.history,
     future: save.future,
@@ -113,10 +113,10 @@ function restoreOrBoot() {
     clearRecorded: false,
     settingsOpen: false
   };
-  render();
 }
 
 function serialize() {
+  if (!state) return;
   if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   saveGame({
     difficulty: state.difficulty,
@@ -128,7 +128,7 @@ function serialize() {
     selected: state.selected,
     noteMode: state.noteMode,
     elapsedMs: state.elapsedMs,
-    hintUses: state.hintUses,
+    hintUses: 0,
     history: state.history,
     future: state.future
   });
@@ -141,11 +141,13 @@ function scheduleSave() {
 }
 
 function setSelected(pos: Position) {
+  if (!state) return;
   state.selected = pos;
   render();
 }
 
 function inputValue(value: number) {
+  if (!state) return;
   const pos = state.selected;
   if (!pos) return;
   if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
@@ -168,6 +170,7 @@ function inputValue(value: number) {
 }
 
 function undo() {
+  if (!state) return;
   if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   const prev = state.history.pop();
   if (!prev) return;
@@ -178,6 +181,7 @@ function undo() {
 }
 
 function redo() {
+  if (!state) return;
   if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value)))) return;
   const next = state.future.pop();
   if (!next) return;
@@ -188,25 +192,24 @@ function redo() {
 }
 
 function toggleSetting(key: keyof Settings) {
+  if (!state) return;
   state.settings[key] = !state.settings[key];
   saveSettings(state.settings);
   render();
 }
 
 function toggleSettingsPanel() {
+  if (!state) return;
   state.settingsOpen = !state.settingsOpen;
   render();
 }
 
-const HINT_LIMIT_PER_BOARD = 3;
-const HINT_PENALTY_MS = 30_000;
-
 function useHint() {
+  if (!state) return;
   const pos = state.selected;
   if (!pos) return;
   const cell = state.cells[pos.r][pos.c];
   if (cell.fixed) return;
-  if (state.hintUses >= HINT_LIMIT_PER_BOARD) return;
 
   const answer = state.solution[pos.r][pos.c];
   if (cell.value === answer) return;
@@ -214,8 +217,6 @@ function useHint() {
   pushHistory();
   cell.value = answer;
   cell.notes.clear();
-  state.hintUses += 1;
-  state.elapsedMs += HINT_PENALTY_MS;
   render();
   scheduleSave();
 }
@@ -231,8 +232,64 @@ function formattedBestTime(ms: number | null) {
   return ms === null ? '--:--' : formattedTime(ms);
 }
 
-function render() {
+function renderHome() {
+  app.innerHTML = `
+  <main class="app-main">
+    <section class="screen home">
+      <div class="home-noise"></div>
+      <div class="home-grid home-grid-left" aria-hidden="true"></div>
+      <div class="home-grid home-grid-right" aria-hidden="true"></div>
+      <div class="home-center">
+        <h1 class="home-title">Nanpure</h1>
+        <p class="home-subtitle">Web</p>
+        <button class="cta" data-act="go-select">挑戦する</button>
+      </div>
+    </section>
+  </main>`;
+
+  const goSelect = app.querySelector<HTMLButtonElement>('button[data-act="go-select"]');
+  if (goSelect) {
+    goSelect.onclick = () => {
+      screen = 'select';
+      render();
+    };
+  }
+}
+
+function renderSelect() {
+  app.innerHTML = `
+  <main class="app-main">
+    <section class="screen select">
+      <h2>難易度を選んでください</h2>
+      <div class="difficulty-grid">
+        <button data-new="easy">易しい</button>
+        <button data-new="medium">普通</button>
+        <button data-new="hard">難しい</button>
+        <button data-new="oni">鬼</button>
+      </div>
+      <div class="row" style="margin-top:16px; justify-content:center;">
+        <button data-act="go-home" class="ghost">タイトルへ戻る</button>
+      </div>
+    </section>
+  </main>`;
+
+  app.querySelectorAll<HTMLButtonElement>('button[data-new]').forEach((btn) => {
+    btn.onclick = () => newGame(btn.dataset.new as Difficulty);
+  });
+
+  const goHome = app.querySelector<HTMLButtonElement>('button[data-act="go-home"]');
+  if (goHome) {
+    goHome.onclick = () => {
+      screen = 'home';
+      render();
+    };
+  }
+}
+
+function renderPlay() {
+  if (!state) return;
   document.body.classList.toggle('dark', state.settings.darkMode);
+
   const values = state.cells.map((r) => r.map((c) => c.value));
   const conflicts = getConflicts(values);
   const selectedValue = state.selected ? values[state.selected.r][state.selected.c] : 0;
@@ -248,78 +305,77 @@ function render() {
   }
 
   app.innerHTML = `
-  <main>
-    <header>
-      <h1>Nanpure Web</h1>
-      <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
-      <button data-act="settings" class="icon-button settings-button" aria-expanded="${state.settingsOpen}" aria-label="設定を開く">⚙️</button>
-    </header>
-    <section class="controls top">
-      <button data-new="easy">易</button>
-      <button data-new="medium">中</button>
-      <button data-new="hard">難</button>
-      <button data-new="oni">鬼</button>
-      <button data-act="undo">Undo</button>
-      <button data-act="redo">Redo</button>
-      <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
-    </section>
-    <section class="controls penalty-controls">
-      <button data-act="hint" class="penalty-button" ${state.hintUses >= HINT_LIMIT_PER_BOARD ? 'disabled' : ''}>罰ヒント（-30秒） 残り${Math.max(0, HINT_LIMIT_PER_BOARD - state.hintUses)}回</button>
-    </section>
-    <section class="board" role="grid" aria-label="ナンプレ盤面">
-      ${state.cells
-        .map((row, r) =>
-          row
-            .map((cell, c) => {
-              const selected = state.selected?.r === r && state.selected?.c === c;
-              const peer = state.selected ? isPeer(state.selected, { r, c }) : false;
-              const same =
-                state.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
-              const conflict = state.settings.mistakeHighlight && conflicts[r][c];
-              const classes = [
-                'cell',
-                selected ? 'selected' : '',
-                peer ? 'peer' : '',
-                same ? 'same' : '',
-                conflict ? 'conflict' : '',
-                cell.fixed ? 'fixed' : ''
-              ].join(' ');
+  <main class="app-main play-main">
+    <section class="screen play">
+      <div class="play-root">
+        <header class="play-header">
+          <button data-act="go-select">難易度</button>
+          <div class="meta">${state.difficulty.toUpperCase()} / ${formattedTime(state.elapsedMs)} / BEST ${formattedBestTime(difficultyStats.bestMs)} / CLR ${difficultyStats.clearCount}</div>
+          <button data-act="settings" class="icon-button settings-button" aria-expanded="${state.settingsOpen}" aria-label="設定を開く">⚙️</button>
+        </header>
+        <section class="controls top">
+          <button data-act="undo">Undo</button>
+          <button data-act="redo">Redo</button>
+          <button data-act="note" class="${state.noteMode ? 'active' : ''}">メモ</button>
+          <button data-act="hint">ヒント</button>
+        </section>
+        <div class="memo-indicator ${state.noteMode ? 'on' : ''}">メモモード: ${state.noteMode ? 'ON' : 'OFF'}</div>
+        <div class="board-area">
+          <section class="board" role="grid" aria-label="ナンプレ盤面">
+            ${state.cells
+              .map((row, r) =>
+                row
+                  .map((cell, c) => {
+                    const selected = state?.selected?.r === r && state?.selected?.c === c;
+                    const peer = state?.selected ? isPeer(state.selected, { r, c }) : false;
+                    const same = state?.settings.highlightSameNumber && selectedValue !== 0 && cell.value === selectedValue;
+                    const conflict = state?.settings.mistakeHighlight && conflicts[r][c];
+                    const classes = ['cell', selected ? 'selected' : '', peer ? 'peer' : '', same ? 'same' : '', conflict ? 'conflict' : '', cell.fixed ? 'fixed' : ''].join(' ');
 
-              if (cell.value !== 0) {
-                return `<button data-cell="${r},${c}" role="gridcell" class="${classes}">${cell.value}</button>`;
-              }
-              const notes = Array.from({ length: 9 }, (_, i) =>
-                cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>'
-              ).join('');
-              return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
-            })
-            .join('')
-        )
-        .join('')}
+                    if (cell.value !== 0) {
+                      return `<button data-cell="${r},${c}" role="gridcell" class="${classes}">${cell.value}</button>`;
+                    }
+                    const notes = Array.from({ length: 9 }, (_, i) =>
+                      cell.notes.has(i + 1) ? `<span>${i + 1}</span>` : '<span></span>'
+                    ).join('');
+                    return `<button data-cell="${r},${c}" role="gridcell" class="${classes}"><small>${notes}</small></button>`;
+                  })
+                  .join('')
+              )
+              .join('')}
+          </section>
+        </div>
+        <section class="controls keypad">
+          ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
+          <button data-num="0">消す</button>
+        </section>
+      </div>
     </section>
-    <section class="controls keypad">
-      ${Array.from({ length: 9 }, (_, i) => `<button data-num="${i + 1}">${i + 1}</button>`).join('')}
-      <button data-num="0">消す</button>
-    </section>
-    <section class="settings ${state.settingsOpen ? 'open' : ''}">
-      <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/>ダークモード</label>
-      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/>ミス表示</label>
-      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/>同一数字ハイライト</label>
-      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/>同数字で消去</label>
-    </section>
+
+    ${
+      state.settingsOpen
+        ? `<div class="modal-overlay"><section class="modal"><header class="modal-header"><h2>設定</h2><button class="modal-close" data-act="settings-close">×</button></header>
+      <label><input data-setting="darkMode" type="checkbox" ${state.settings.darkMode ? 'checked' : ''}/> ダークモード</label>
+      <label><input data-setting="mistakeHighlight" type="checkbox" ${state.settings.mistakeHighlight ? 'checked' : ''}/> ミス表示</label>
+      <label><input data-setting="highlightSameNumber" type="checkbox" ${state.settings.highlightSameNumber ? 'checked' : ''}/> 同一数字ハイライト</label>
+      <label><input data-setting="toggleToErase" type="checkbox" ${state.settings.toggleToErase ? 'checked' : ''}/> 同数字で消去</label>
+      </section></div>`
+        : ''
+    }
+
     ${
       cleared
-        ? `<div class="clear">クリア！ 今回タイム: ${formattedTime(state.elapsedMs)} / ベストタイム: ${formattedBestTime(
-            difficultyStats.bestMs
-          )} / 累計クリア: ${difficultyStats.clearCount}</div>`
+        ? `<div class="modal-overlay"><section class="modal"><h2>クリア！</h2><p>今回: ${formattedTime(state.elapsedMs)}</p><p>ベスト: ${formattedBestTime(difficultyStats.bestMs)}</p><div class="row"><button data-act="retry">もう一度</button><button data-act="title">タイトルへ</button></div></section></div>`
         : ''
     }
   </main>`;
 
-  wireEvents();
+  wirePlayEvents();
 }
 
-function wireEvents() {
+function wirePlayEvents() {
+  if (!state) return;
+
   app.querySelectorAll<HTMLButtonElement>('button[data-cell]').forEach((btn) => {
     btn.onclick = () => {
       const [r, c] = (btn.dataset.cell ?? '0,0').split(',').map(Number);
@@ -329,10 +385,6 @@ function wireEvents() {
 
   app.querySelectorAll<HTMLButtonElement>('button[data-num]').forEach((btn) => {
     btn.onclick = () => inputValue(Number(btn.dataset.num));
-  });
-
-  app.querySelectorAll<HTMLButtonElement>('button[data-new]').forEach((btn) => {
-    btn.onclick = () => newGame(btn.dataset.new as Difficulty);
   });
 
   app.querySelectorAll<HTMLInputElement>('input[data-setting]').forEach((el) => {
@@ -347,6 +399,7 @@ function wireEvents() {
   const noteBtn = byAct('note');
   if (noteBtn) {
     noteBtn.onclick = () => {
+      if (!state) return;
       state.noteMode = !state.noteMode;
       render();
     };
@@ -355,10 +408,48 @@ function wireEvents() {
   if (hintBtn) hintBtn.onclick = useHint;
   const settingsBtn = byAct('settings');
   if (settingsBtn) settingsBtn.onclick = toggleSettingsPanel;
+  const settingsCloseBtn = byAct('settings-close');
+  if (settingsCloseBtn) settingsCloseBtn.onclick = toggleSettingsPanel;
+  const goSelectBtn = byAct('go-select');
+  if (goSelectBtn) {
+    goSelectBtn.onclick = () => {
+      screen = 'select';
+      if (state) state.settingsOpen = false;
+      render();
+    };
+  }
+  const retryBtn = byAct('retry');
+  if (retryBtn) {
+    retryBtn.onclick = () => {
+      if (!state) return;
+      newGame(state.difficulty);
+    };
+  }
+  const titleBtn = byAct('title');
+  if (titleBtn) {
+    titleBtn.onclick = () => {
+      state = null;
+      screen = 'home';
+      render();
+    };
+  }
+}
+
+function render() {
+  document.body.classList.toggle('play-mode', screen === 'play');
+  if (screen === 'home') {
+    renderHome();
+    return;
+  }
+  if (screen === 'select') {
+    renderSelect();
+    return;
+  }
+  renderPlay();
 }
 
 document.addEventListener('keydown', (e) => {
-  if (!state.selected) return;
+  if (screen !== 'play' || !state || !state.selected) return;
   const { r, c } = state.selected;
   if (e.key.startsWith('Arrow')) {
     const next = { r, c };
@@ -382,7 +473,7 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', serialize);
 
 setInterval(() => {
-  if (!state.timerRunning) return;
+  if (screen !== 'play' || !state || !state.timerRunning) return;
   state.elapsedMs += 1000;
   const meta = app.querySelector<HTMLDivElement>('.meta');
   if (meta) {
@@ -392,4 +483,5 @@ setInterval(() => {
   scheduleSave();
 }, 1000);
 
-restoreOrBoot();
+restoreSave();
+render();
