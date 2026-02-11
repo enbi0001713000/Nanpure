@@ -457,6 +457,13 @@ body.play-mode .app-main.play-main {
   align-items: center;
 }
 
+.dev-counters {
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.72;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
 .meta {
   text-align: center;
   font-size: clamp(16px, 2.2vw, 28px);
