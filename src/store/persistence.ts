@@ -1,6 +1,9 @@
 import type { Difficulty, GameStats, HistorySnapshot, Settings } from '../core/types.js';
 
 export type SaveData = {
+  mode: 'standard' | 'daily';
+  dailyDate: string | null;
+  puzzleId: string;
   difficulty: Difficulty;
   initial: number[][];
   solution: number[][];
@@ -18,7 +21,9 @@ export type SaveData = {
 };
 
 const SETTINGS_KEY = 'np_settings_v1';
-const SAVE_KEY = 'np_save_v1';
+const LEGACY_SAVE_KEY = 'np_save_v1';
+const STANDARD_SAVE_KEY = 'np_save_standard_v2';
+const DAILY_SAVE_KEY_PREFIX = 'np_save_daily_v1_';
 const STATS_KEY = 'np_stats_v1';
 const RECENT_AVG_SAMPLE_SIZE = 5;
 
@@ -134,16 +139,19 @@ export function saveSettings(settings: Settings) {
   safeSetItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-export function loadSave(): SaveData | null {
-  const parsed = readJson(SAVE_KEY);
+function parseSave(key: string): SaveData | null {
+  const parsed = readJson(key);
   if (!parsed || typeof parsed !== 'object') return null;
   const save = parsed as Partial<SaveData>;
   if (!isDifficulty(save.difficulty) || !isNumberGrid(save.values) || !isBooleanGrid(save.fixed) || !isNotesGrid(save.notes)) {
-    safeRemoveItem(SAVE_KEY);
+    safeRemoveItem(key);
     return null;
   }
   return {
     ...(save as SaveData),
+    mode: save.mode === 'daily' ? 'daily' : 'standard',
+    dailyDate: typeof save.dailyDate === 'string' ? save.dailyDate : null,
+    puzzleId: typeof save.puzzleId === 'string' ? save.puzzleId : 'unknown',
     difficulty: save.difficulty,
     history: Array.isArray(save.history) ? save.history : [],
     future: Array.isArray(save.future) ? save.future : [],
@@ -153,12 +161,56 @@ export function loadSave(): SaveData | null {
   };
 }
 
-export function saveGame(data: SaveData) {
-  safeSetItem(SAVE_KEY, JSON.stringify(data));
+function saveByKey(key: string, data: SaveData) {
+  safeSetItem(key, JSON.stringify(data));
 }
 
-export function clearSave() {
-  safeRemoveItem(SAVE_KEY);
+function clearByKey(key: string) {
+  safeRemoveItem(key);
+}
+
+function dailySaveKey(dateSeed: string): string {
+  return `${DAILY_SAVE_KEY_PREFIX}${dateSeed}`;
+}
+
+function cleanupDailySaves(activeDate: string) {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(DAILY_SAVE_KEY_PREFIX)) continue;
+      if (key !== dailySaveKey(activeDate)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {}
+}
+
+export function loadStandardSave(): SaveData | null {
+  return parseSave(STANDARD_SAVE_KEY) ?? parseSave(LEGACY_SAVE_KEY);
+}
+
+export function loadDailySave(dateSeed: string): SaveData | null {
+  cleanupDailySaves(dateSeed);
+  return parseSave(dailySaveKey(dateSeed));
+}
+
+export function saveStandardGame(data: SaveData) {
+  saveByKey(STANDARD_SAVE_KEY, data);
+  clearByKey(LEGACY_SAVE_KEY);
+}
+
+export function saveDailyGame(dateSeed: string, data: SaveData) {
+  cleanupDailySaves(dateSeed);
+  saveByKey(dailySaveKey(dateSeed), data);
+}
+
+export function clearStandardSave() {
+  clearByKey(STANDARD_SAVE_KEY);
+  clearByKey(LEGACY_SAVE_KEY);
+}
+
+export function clearDailySave(dateSeed: string) {
+  clearByKey(dailySaveKey(dateSeed));
 }
 
 export function loadStats(): GameStats {

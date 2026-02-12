@@ -172,6 +172,24 @@ export function getRandomPuzzle(difficulty: Difficulty, recentPuzzleIds: string[
   return selected;
 }
 
+function hashSeed(seed: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function getDailyPuzzle(difficulty: Difficulty, dateSeed: string): Puzzle {
+  const list = bank[difficulty];
+  const seed = `${difficulty}:${dateSeed}`;
+  const index = hashSeed(seed) % list.length;
+  const selected = list[index];
+  console.info(`[puzzle/daily] difficulty=${DIFFICULTY_LABEL[difficulty]} date=${dateSeed} id=${selected.id}`);
+  return selected;
+}
+
 export function pushRecentPuzzleId(recentPuzzleIds: string[], puzzleId: string): string[] {
   const next = recentPuzzleIds.filter((id) => id !== puzzleId);
   next.push(puzzleId);

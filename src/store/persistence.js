@@ -1,5 +1,7 @@
 const SETTINGS_KEY = 'np_settings_v1';
-const SAVE_KEY = 'np_save_v1';
+const LEGACY_SAVE_KEY = 'np_save_v1';
+const STANDARD_SAVE_KEY = 'np_save_standard_v2';
+const DAILY_SAVE_KEY_PREFIX = 'np_save_daily_v1_';
 const STATS_KEY = 'np_stats_v1';
 const RECENT_AVG_SAMPLE_SIZE = 5;
 const DEFAULT_STATS = {
@@ -98,17 +100,20 @@ export function loadSettings() {
 export function saveSettings(settings) {
     safeSetItem(SETTINGS_KEY, JSON.stringify(settings));
 }
-export function loadSave() {
-    const parsed = readJson(SAVE_KEY);
+function parseSave(key) {
+    const parsed = readJson(key);
     if (!parsed || typeof parsed !== 'object')
         return null;
     const save = parsed;
     if (!isDifficulty(save.difficulty) || !isNumberGrid(save.values) || !isBooleanGrid(save.fixed) || !isNotesGrid(save.notes)) {
-        safeRemoveItem(SAVE_KEY);
+        safeRemoveItem(key);
         return null;
     }
     return {
         ...save,
+        mode: save.mode === 'daily' ? 'daily' : 'standard',
+        dailyDate: typeof save.dailyDate === 'string' ? save.dailyDate : null,
+        puzzleId: typeof save.puzzleId === 'string' ? save.puzzleId : 'unknown',
         difficulty: save.difficulty,
         history: Array.isArray(save.history) ? save.history : [],
         future: Array.isArray(save.future) ? save.future : [],
@@ -117,11 +122,49 @@ export function loadSave() {
         recentPuzzleIds: sanitizeRecentPuzzleIds(save.recentPuzzleIds)
     };
 }
-export function saveGame(data) {
-    safeSetItem(SAVE_KEY, JSON.stringify(data));
+function saveByKey(key, data) {
+    safeSetItem(key, JSON.stringify(data));
 }
-export function clearSave() {
-    safeRemoveItem(SAVE_KEY);
+function clearByKey(key) {
+    safeRemoveItem(key);
+}
+function dailySaveKey(dateSeed) {
+    return `${DAILY_SAVE_KEY_PREFIX}${dateSeed}`;
+}
+function cleanupDailySaves(activeDate) {
+    try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith(DAILY_SAVE_KEY_PREFIX))
+                continue;
+            if (key !== dailySaveKey(activeDate)) {
+                localStorage.removeItem(key);
+            }
+        }
+    }
+    catch { }
+}
+export function loadStandardSave() {
+    return parseSave(STANDARD_SAVE_KEY) ?? parseSave(LEGACY_SAVE_KEY);
+}
+export function loadDailySave(dateSeed) {
+    cleanupDailySaves(dateSeed);
+    return parseSave(dailySaveKey(dateSeed));
+}
+export function saveStandardGame(data) {
+    saveByKey(STANDARD_SAVE_KEY, data);
+    clearByKey(LEGACY_SAVE_KEY);
+}
+export function saveDailyGame(dateSeed, data) {
+    cleanupDailySaves(dateSeed);
+    saveByKey(dailySaveKey(dateSeed), data);
+}
+export function clearStandardSave() {
+    clearByKey(STANDARD_SAVE_KEY);
+    clearByKey(LEGACY_SAVE_KEY);
+}
+export function clearDailySave(dateSeed) {
+    clearByKey(dailySaveKey(dateSeed));
 }
 export function loadStats() {
     const parsed = readJson(STATS_KEY);
