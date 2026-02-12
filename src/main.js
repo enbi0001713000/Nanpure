@@ -1,8 +1,9 @@
-import { getRandomPuzzle, pushRecentPuzzleId } from './core/puzzleBank.js';
+import { getDailyPuzzle, getRandomPuzzle, pushRecentPuzzleId } from './core/puzzleBank.js';
 import { getCandidates, getConflicts, isCompleteAndValid, isPeer, toGrid } from './core/sudoku.js';
-import { clearSave, loadSave, loadSettings, loadStats, recordClearStats, saveGame, saveSettings } from './store/persistence.js';
+import { clearDailySave, clearStandardSave, loadDailySave, loadSettings, loadStandardSave, loadStats, recordClearStats, saveDailyGame, saveSettings, saveStandardGame } from './store/persistence.js';
 const USERNAME_KEY = 'np_username_v1';
 const HASH_TAG = '#えびナンプレ';
+const DAILY_DIFFICULTY = 'medium';
 let screen = 'home';
 let state = null;
 let usernameModalOpen = false;
@@ -84,7 +85,6 @@ function rebuildAutoNotes() {
         }
     }
 }
-
 function clearAllNotes() {
     if (!state)
         return;
@@ -94,7 +94,6 @@ function clearAllNotes() {
         }
     }
 }
-
 function createCells(values, initial) {
     return values.map((row, r) => row.map((value, c) => ({
         value,
@@ -102,12 +101,21 @@ function createCells(values, initial) {
         notes: new Set()
     })));
 }
-function newGame(difficulty) {
-    const p = getRandomPuzzle(difficulty, recentPuzzleIds[difficulty]);
-    recentPuzzleIds[difficulty] = pushRecentPuzzleId(recentPuzzleIds[difficulty], p.id);
+function todaySeed(date = new Date()) {
+    return date.toISOString().slice(0, 10);
+}
+function newGame(difficulty, mode = 'standard') {
+    const dailyDate = mode === 'daily' ? todaySeed() : null;
+    const p = mode === 'daily' && dailyDate ? getDailyPuzzle(difficulty, dailyDate) : getRandomPuzzle(difficulty, recentPuzzleIds[difficulty]);
+    if (mode === 'standard') {
+        recentPuzzleIds[difficulty] = pushRecentPuzzleId(recentPuzzleIds[difficulty], p.id);
+    }
     const initial = toGrid(p.puzzle);
     const solution = toGrid(p.solution);
     state = {
+        mode,
+        puzzleId: p.id,
+        dailyDate,
         difficulty,
         initial,
         solution,
@@ -132,11 +140,17 @@ function newGame(difficulty) {
     render();
 }
 function restoreSave() {
-    const save = loadSave();
+    const dailySeed = todaySeed();
+    const save = loadDailySave(dailySeed) ?? loadStandardSave();
     if (!save)
         return;
-    recentPuzzleIds = save.recentPuzzleIds;
+    if (save.mode === 'standard') {
+        recentPuzzleIds = save.recentPuzzleIds;
+    }
     state = {
+        mode: save.mode,
+        puzzleId: save.puzzleId,
+        dailyDate: save.dailyDate,
         difficulty: save.difficulty,
         initial: save.initial,
         solution: save.solution,
@@ -166,7 +180,10 @@ function serialize() {
         return;
     if (isCompleteAndValid(state.cells.map((r) => r.map((c) => c.value))))
         return;
-    saveGame({
+    const saveData = {
+        mode: state.mode,
+        puzzleId: state.puzzleId,
+        dailyDate: state.dailyDate,
         difficulty: state.difficulty,
         initial: state.initial,
         solution: state.solution,
@@ -181,7 +198,13 @@ function serialize() {
         history: state.history,
         future: state.future,
         recentPuzzleIds
-    });
+    };
+    if (state.mode === 'daily' && state.dailyDate) {
+        saveDailyGame(state.dailyDate, saveData);
+        clearStandardSave();
+        return;
+    }
+    saveStandardGame(saveData);
 }
 let saveTimer;
 let hasPendingSave = false;
@@ -287,7 +310,6 @@ function toggleSetting(key) {
             state.noteMode = false;
             rebuildAutoNotes();
         }
-
         else {
             clearAllNotes();
         }
@@ -347,7 +369,8 @@ function clearText() {
     if (!state)
         return '';
     const name = normalizeUsername(getUsername()) || '匿名';
-    return `${name} が ${difficultyLabel(state.difficulty)} を ${formattedTime(state.elapsedMs)} でクリア！ ${HASH_TAG}`;
+    const modeLabel = state.mode === 'daily' && state.dailyDate ? `DAILY(${state.dailyDate})` : 'RANDOM';
+    return `${name} が ${difficultyLabel(state.difficulty)} を ${formattedTime(state.elapsedMs)} でクリア！ [${modeLabel}] [ID:${state.puzzleId}] ${HASH_TAG}`;
 }
 function shareUrl() {
     const text = encodeURIComponent(clearText());
@@ -416,6 +439,7 @@ function renderHome() {
         <h1 class="home-title">ナンプレ</h1>
         <p class="home-subtitle">-えびの挑戦状-</p>
         <button class="cta" data-act="go-select">挑戦する</button>
+        <button class="cta ghost" data-act="go-daily">今日の1問</button>
         ${renderSummaryCard(loadStats())}
       </div>
     </section>
@@ -427,6 +451,15 @@ function renderHome() {
             usernameDraft = getUsername();
             usernameModalOpen = !isValidUsername(usernameDraft);
             render();
+        };
+    }
+    const goDaily = app.querySelector('button[data-act="go-daily"]');
+    if (goDaily) {
+        goDaily.onclick = () => {
+            if (!isValidUsername(getUsername())) {
+                setUsername('匿名');
+            }
+            newGame(DAILY_DIFFICULTY, 'daily');
         };
     }
 }
@@ -458,7 +491,7 @@ function renderSelect() {
                 render();
                 return;
             }
-            newGame(btn.dataset.new);
+            newGame(btn.dataset.new, 'standard');
         };
     });
     const goHome = app.querySelector('button[data-act="go-home"]');
@@ -627,7 +660,12 @@ function renderPlay() {
         game.timerRunning = false;
         if (!game.clearRecorded) {
             game.clearRecorded = true;
-            clearSave();
+            if (game.mode === 'daily' && game.dailyDate) {
+                clearDailySave(game.dailyDate);
+            }
+            else {
+                clearStandardSave();
+            }
             game.stats = recordClearStats(game.difficulty, game.elapsedMs, game.mistakeCount === 0);
         }
     }
@@ -698,7 +736,7 @@ function wirePlayEvents() {
         retryBtn.onclick = () => {
             if (!state)
                 return;
-            newGame(state.difficulty);
+            newGame(state.difficulty, state.mode);
         };
     }
     const titleBtn = byAct('title');
